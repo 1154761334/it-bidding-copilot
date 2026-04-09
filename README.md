@@ -1,91 +1,183 @@
-# IT Bidding Copilot (IT 租赁与服务投标助手)
+# IT Bidding Copilot
 
-🚀 **2026 年最先进的 Agentic AI 投标全流程辅助系统**
+面向政企 IT 投标场景的前后端分离系统，当前唯一有效主线为 `FastAPI + PostgreSQL/pgvector + React/Vite`。
 
-基于 Python + Streamlit + CrewAI + LangGraph 开发，专为政企 IT 基础设施服务（机房租赁、云服务、系统集成）打造的“拆标-编标-审标”一体化助手。通过多智能体协作与闭环审标机制，大幅提升投标文件的质量与合规性。
+## 当前基线
 
-## ✨ 核心特性
+- 前端：React + Vite
+- 后端：FastAPI
+- 数据库：PostgreSQL + pgvector
+- 接口前缀：`/api/v1/*`
+- 当前测试与联调状态请以 `docs/current_status.md` 为准
+- 当前前端浏览器巡检状态请以 `docs/site_function_audit.md` 为准
 
-- **🤖 多智能体协同 (CrewAI)**: 内置标书分析专家、商务合规管家、技术方案主笔，多角色协同作业。
-- **🔄 闭环循环审标 (LangGraph)**: 自动红脸评审机制，`审查 -> 判定 -> 整改` 自动化闭环，规避废标风险。
-- **📚 企业 RAG 知识库 (FAISS)**: 语义级搜索历史标书、资质文件，自动匹配最佳素材。
-- **📋 智能 RFP 拆解**: 毫秒级提取废标条款、商务加分项、技术响应点。
-- **📦 一键导出规范标书**: 自动生成符合招投标规范的 Word 文档（封面、目录、多级标题）。
+当前项目已完成并验证的主链路包括：
+- 企业资产导入与检索
+- `docs/商务技术文件.docx` 资质预提与图片入库
+- 真实采购文件识别与 `analysis-check`
+- 偏离矩阵
+- 章节生成与终审
+- DOCX 导出
 
-## 🤖 智能体说明 (Agent Roles)
+补充设计文档：
+- 文档解析栈方案：`docs/document_parsing_stack_design.md`
+- 外部协作总方案：`docs/opus_collaboration_brief.md`
+- 多 AI 协作与开发日志规范：`docs/development_workflow.md`
 
-本系统采用 CrewAI 框架，构建了四个核心 Agent 角色，分工明确：
+## 功能范围
 
-1. **需求统筹与拆标专家 (Bid Analyst)**:
-   - **目标**: 全面拆解招标文件，动态提取核心采购需求、商务门槛、废标条款及评分标准。
-   - **职责**: 确保后续编标环节零遗漏、零误读，识别潜在雷区。
+### 1. 企业资质库
+- 支持企业材料导入、分类、切块、向量检索
+- 支持 `Obsidian Vault` 作为知识源导入主库
+- 支持对 `docs/商务技术文件.docx` 做“规则切块 + LLM 标准化 + 后端校验后入库”
+- 支持对商务技术文件预提结果做二次清洗与去重，优先保留明确证书、历史案例和实名人员
+- 支持展示最近一轮企业材料导入批次，便于人工确认本轮新入库资产
+- 支持在企业资产中心对证书、案例、人员做新增、修改、删除和批量删除
 
-2. **商务合规管家 (Commercial Specialist)**:
-   - **目标**: 撰写《商务响应表》，精准匹配并梳理公司商务资质与合规材料。
-   - **职责**: 标注证书编号、有效期，识别缺失资质，绝不捏造信息。
+### 2. 采购文件识别
+- 支持真实采购文件上传、异步分析、项目建档
+- 支持项目元信息、要求、废标项、评分项提取
+- 支持 `analysis-check` 质量校验
+- 支持在 `/rfp` 页面修正项目信息与关键要求后确认建档
+- 支持历史项目源文件路径失效时回退校验，不再因上传目录缺失直接报错
+- 当前识别策略为“首轮抽取 + Reviewer/Resolver 复核 + 评分表规则补全”
 
-3. **首席技术主笔 (Technical Architect)**:
-   - **目标**: 结合知识库与 RFP 要求，撰写高质量的《技术与服务响应方案》。
-   - **职责**: 逐条响应技术参数，提供具体的落地方案，打磨 SLA 服务保障与应急预案。
+### 3. 编标与导出
+- 支持按项目生成目录和章节草稿
+- 支持在编标前确认“项目素材包”，对资质、案例、人员和补充材料做智能推荐与人工确认
+- 支持在编标大厅中对当前章节进行在线 Markdown 改稿并保存
+- 支持单章节生成、整项目自动续写、仅重试未完成章节
+- 支持终审与风险汇总
+- 支持按审标结果拦截不合格项目导出 `.docx`
+- 支持在导出前检查中显示采购母版、图片证据和被拦截章节详情
 
-4. **红脸评标组长 (Chief Reviewer)**:
-   - **目标**: 对照废标条款和评分表，进行“吹毛求疵”式的交叉审查。
-   - **职责**: 输出结构化《整改意见》，标注问题等级（废标风险/扣分风险/优化建议）。
+## 快速开始
 
-## 🔄 智能审标工作流 (LangGraph Review Workflow)
-
-系统利用 LangGraph 构建了一个循环审标回路，支持 `Review → Decide → Revise` 自动化流程，最多可进行 3 轮迭代：
-
-- **Review 节点**: 模拟评委视角，对生成的标书内容进行严苛审计。
-- **Decide 路由**: 判断标书是否通过。若有严重废标项或未达标，则指向 Revise 节点。
-- **Revise 节点**: 根据审查意见，自动调整标书内容，确保 100% 响应 RFP 要求。
-
-## 🛠️ 技术栈
-
-- **前端/后端**: [Streamlit](https://streamlit.io/) (1.40+)
-- **Agent 编排**: [CrewAI](https://github.com/joaomador/crewAI)
-- **状态机/流**: [LangGraph](https://github.com/langchain-ai/langgraph)
-- **向量数据库**: FAISS (支持 RAG)
-- **大模型**: GPT-4o & Text-Embedding-3-Small
-- **文档处理**: python-docx
-
-## 🚀 快速开始
-
-### 1. 环境准备
-使用 Python 3.10+ 环境。
+### 1. 安装依赖
 
 ```bash
 git clone https://github.com/1154761334/it-bidding-copilot.git
 cd it-bidding-copilot
 pip install -r requirements.txt
+npm install --prefix frontend
 ```
 
-### 2. 配置秘钥
-在项目根目录创建 `.env` 文件并填入您的 API Key：
+### 2. 配置环境
+
 ```bash
-OPENAI_API_KEY=your_openai_api_key_here
-# 其他配置（如需）
+cp .env.example .env
 ```
 
-### 3. 启动应用
+最小配置：
+
 ```bash
-streamlit run app.py
+DATABASE_URL=postgresql://root:bidcore_password123@localhost:5432/bidcore_enterprise
+LLM_API_KEY=your_llm_api_key_here
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o
+EMBEDDING_MODEL=
 ```
 
-## 📂 项目结构
+如使用当前已验证的 Ark Coding 配置：
+
+```bash
+LLM_API_KEY=53598855-b050-4230-96d4-72b986d6a887
+LLM_BASE_URL=https://ark.cn-beijing.volces.com/api/coding/v3
+LLM_MODEL=Doubao-Seed-Code
+EMBEDDING_MODEL=
+```
+
+说明：
+- 当前默认推荐显式模型为 `Doubao-Seed-Code`
+- `LLM_MODEL=Auto` 在当前兼容层的部分结构化调用上可能返回 `UnsupportedModel`
+- 未配置 `EMBEDDING_MODEL` 时，系统会对向量能力静默降级，便于先打通流程
+
+### 3. 启动服务
+
+```bash
+./start_app.sh start
+```
+
+启动后：
+- 前端：`http://127.0.0.1:20031/`
+- 后端：`http://127.0.0.1:8000`
+- 健康检查：`http://127.0.0.1:8000/healthz`
+
+常用命令：
+
+```bash
+./start_app.sh status
+./start_app.sh stop
+./start_app.sh restart
+```
+
+## 常用验证脚本
+
+```bash
+./venv/bin/python scripts/seed/seed_demo_data.py
+./venv/bin/python scripts/verify/verify_obsidian_vault_flow.py
+./venv/bin/python scripts/verify/verify_business_doc_ingest_flow.py
+./venv/bin/python scripts/verify/verify_rfp_analysis_quality.py
+./venv/bin/python scripts/verify/verify_real_workflows.py
+./venv/bin/python scripts/verify/verify_project_autorun_flow.py
+./venv/bin/python scripts/verify/verify_embedding_runtime.py
+```
+
+## 关键接口
+
+- `GET /healthz`
+- `GET /api/v1/dashboard/context`
+- `POST /api/v1/enterprise/vault-ingest/{company_id}`
+- `POST /api/v1/enterprise/business-doc-ingest/{company_id}`
+- `GET /api/v1/enterprise/assets-overview/{company_id}`
+- `GET /api/v1/enterprise/intake-readiness/{company_id}`
+- `GET /api/v1/enterprise/latest-ingest-batch/{company_id}`
+- `POST /api/v1/rfp/analyze`
+- `GET /api/v1/rfp/tasks/{task_id}`
+- `GET /api/v1/rfp/projects/{project_id}/analysis-check`
+- `GET /api/v1/rfp/projects/{project_id}`
+- `POST /api/v1/rfp/projects/{project_id}/analysis-confirm`
+- `GET /api/v1/rfp/projects/{project_id}/deviation`
+- `PUT /api/v1/rfp/projects/{project_id}/deviation`
+- `POST /api/v1/rfp/projects/{project_id}/deviation/confirm`
+- `POST /api/v1/bid/projects/{project_id}/draft-all`
+- `POST /api/v1/bid/review/{project_id}`
+- `POST /api/v1/bid/export-docx/{project_id}`
+- `GET /api/v1/config/capabilities`
+
+## 项目结构
+
+详细目录职责见 [docs/project_structure.md](/root/it-bidding-copilot/docs/project_structure.md)。
+
+当前核心目录：
 
 ```text
-├── agents/             # CrewAI Agent 定义 (Analyst, Specialist, Architect, Reviewer)
-├── workflows/          # LangGraph 循环状态机与任务链定义
-├── knowledge/          # 向量库构建、Embedding 与 RAG 模块
-├── utils/              # PDF 解析、Word 导出、RFP 提取等工具类
-├── pages/              # Streamlit 多页面 UI (企业档案、RFP 拆解、协作编标、循环审标等)
-├── data/               # 存储企业档案、向量索引 (Git 已忽略)
-├── templates/          # 标书 Word 模板
-├── app.py              # 主程序入口（侧边栏导航）
-└── config.py           # 全局 LLM 设置与业务参数配置
+api/         FastAPI 路由、模型、服务与运行时能力
+frontend/    React/Vite 前端
+utils/       文档解析、抽取、检索与导出工具
+scripts/     按 ops / seed / verify 分类的脚本目录
+tests/       pytest 测试
+docs/        架构、状态、策略与样例文档
+alembic/     数据库迁移
+assets/      运行期提取图片等派生产物
+data/        当前保留的运行期资产目录
 ```
 
-## 📄 License
+## 相关文档
+
+- [docs/current_status.md](/root/it-bidding-copilot/docs/current_status.md)
+- [docs/architecture.md](/root/it-bidding-copilot/docs/architecture.md)
+- [docs/development_workflow.md](/root/it-bidding-copilot/docs/development_workflow.md)
+- [docs/feature_inventory.md](/root/it-bidding-copilot/docs/feature_inventory.md)
+- [docs/frontend_backend_alignment.md](/root/it-bidding-copilot/docs/frontend_backend_alignment.md)
+- [docs/project_structure.md](/root/it-bidding-copilot/docs/project_structure.md)
+- [docs/runtime_execution_design.md](/root/it-bidding-copilot/docs/runtime_execution_design.md)
+- [docs/multi_round_extraction_strategy.md](/root/it-bidding-copilot/docs/multi_round_extraction_strategy.md)
+- [docs/site_function_audit.md](/root/it-bidding-copilot/docs/site_function_audit.md)
+- [docs/design_requirement_matrix.md](/root/it-bidding-copilot/docs/design_requirement_matrix.md)
+- [docs/main_flow_task_list.md](/root/it-bidding-copilot/docs/main_flow_task_list.md)
+- [docs/development_logs/README.md](/root/it-bidding-copilot/docs/development_logs/README.md)
+
+## License
 
 MIT License

@@ -108,6 +108,19 @@ data/
 *.json_profile
 outputs/
 logs/
+exports/
+uploads/
+assets/extracted_images/
+models/
+docs/商务技术文件.docx
+frontend/dist/
+frontend/node_modules/
+frontend/test-results/
+frontend/playwright-report/
+.run/
+.codex
+*.db
+*.sqlite3
 
 # Mac files
 .DS_Store
