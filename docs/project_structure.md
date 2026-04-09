@@ -49,6 +49,9 @@ React + Vite 前端。
 - `scripts/seed/`: 演示数据与结构化种子
 - `scripts/verify/`: 真实联调与链路验证
 
+其中：
+- `scripts/ops/check_runtime_assets.py` 用于检查 `models/`、样例文档、模板等关键运行时资产是否存在
+
 ### `tests/`
 `pytest` 测试目录。
 
@@ -77,6 +80,17 @@ React + Vite 前端。
 ### `data/`
 当前保留的运行期资产目录。这里已有一批历史解析结果，仍可能被当前数据库记录引用，因此本轮未清空。
 
+### `models/`
+本地模型与解析器依赖目录。
+
+当前主要包含：
+- `magic-pdf` 相关模型
+- OCR / Layout / Formula / Table 识别模型
+- 部分 embedding / 解析运行时模型文件
+
+该目录当前体积约 `18G`，属于大体积运行时依赖，不纳入当前 GitHub 仓库版本控制。
+后续如需在新机器完整复现文档解析能力，需要额外同步该目录或按部署说明重新准备。
+
 ## 运行期目录
 
 以下目录属于运行时产物，不应作为源码的一部分来理解：
@@ -85,6 +99,7 @@ React + Vite 前端。
 - `exports/`
 - `logs/`
 - `.run/`
+- `models/`
 - `frontend/dist/`
 - `frontend/node_modules/`
 - `assets/extracted_images/`
@@ -95,6 +110,7 @@ React + Vite 前端。
 - `assets/extracted_images/` 为文档解析时自动提取的图片缓存
 - `data/assets/` 为当前保留的运行期图片/文档资产
 - `data/enterprises/`、`data/knowledge_base/`、`data/sessions/` 仍属于历史运行期目录，后续建议继续收敛到统一 runtime 目录
+- `models/` 为本地模型权重和解析器运行时依赖，不随 GitHub 仓库同步
 
 ## 本轮已删除的历史目录
 

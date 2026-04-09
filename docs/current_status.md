@@ -20,6 +20,8 @@
 - `EnterpriseAssetService`、`DraftingReviewService` 目前是可运行的简化版实现，能力明显弱于文档中描述的“完整产品化版本”
 - 当前 `pytest` 基线已经失真，不能再沿用“`53 passed` / `52 passed`”作为仓库真实状态
 - 现有文档中关于 Playwright、真实联调、页面巡检的大部分记录可视为“历史曾完成”，但不应再默认代表当前代码状态
+- 当前 GitHub 仓库已推送最新源码基线，但未包含服务器上的全部运行时大资产，尤其是 `models/` 与超大样例文档
+- 已新增 `scripts/ops/check_runtime_assets.py`，用于在新机器上快速检查关键运行时资产是否齐备
 
 ## 1.2 协作方式补充说明
 
@@ -244,6 +246,10 @@
 - 后端单元测试已明确暴露 review/export 与 enterprise asset service 的能力回退，当前不能再把这些模块视为“稳定完成”
 - `BiddingHall` 的选区 AI 改写接口路径仍是旧口径，属于未收口功能
 - `docs/site_function_audit.md`、`docs/feature_inventory.md` 中个别状态描述已落后于当前代码，需要以本轮更新后的版本为准
+- 当前远端仓库不包含本机 `models/` 大目录，也不包含超大的 `docs/商务技术文件.docx`
+- 因此新机器 clone 后可以得到最新代码，但不能直接等价复现本机全部文档解析运行能力
+- 后续需要补一份“模型资产准备说明”或下载脚本，解决跨环境复现问题
+- 当前可先通过 `./venv/bin/python scripts/ops/check_runtime_assets.py` 判断本机是否缺少模型目录、样例文档和模板
 
 ## 5.1 本轮结构清理
 
@@ -258,6 +264,23 @@
 - 重写 `README.md` 与 `docs/architecture.md`，统一到当前真实主线
 
 当前保留目录以 `api/`、`frontend/`、`utils/`、`scripts/`、`tests/`、`docs/` 为核心。
+
+## 5.2 本轮 GitHub 推送说明
+
+本轮已将当前前后端分离主线源码推送到 GitHub 私有仓库。
+
+已推送：
+
+- 当前 `FastAPI + React + PostgreSQL/pgvector` 主线代码
+- 文档、脚本、测试、模板与迁移文件
+
+未推送：
+
+- `models/` 本地模型目录
+- 超大样例文档 `docs/商务技术文件.docx`
+- 运行期上传、导出、日志和缓存产物
+
+因此，当前远端仓库应理解为“最新源码基线”，不是“服务器完整运行时镜像”。
 
 ## 6. 下一步建议
 

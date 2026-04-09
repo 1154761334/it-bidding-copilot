@@ -92,6 +92,39 @@ EMBEDDING_MODEL=
 - `LLM_MODEL=Auto` 在当前兼容层的部分结构化调用上可能返回 `UnsupportedModel`
 - 未配置 `EMBEDDING_MODEL` 时，系统会对向量能力静默降级，便于先打通流程
 
+## 仓库内容与运行时资产说明
+
+当前 GitHub 仓库保存的是“可协作的源码基线”，不是服务器上的全部运行时资产快照。
+
+已推送到仓库的主要是：
+
+- 前后端源码
+- Alembic 迁移
+- 脚本、测试、模板
+- 轻量文档和配置
+
+未推送到仓库的主要是：
+
+- `models/`
+- 超大样例文档 `docs/商务技术文件.docx`
+- 运行期目录中的上传、导出、日志、缓存和解析产物
+
+原因：
+
+- `models/` 目录当前约 `18G`，主要是 `magic-pdf`、OCR、版面分析、公式识别等本地模型权重，属于运行时依赖，不适合直接进入 Git 仓库
+- `docs/商务技术文件.docx` 当前约 `124MB`，超过常规 GitHub 单文件可接受范围
+
+这意味着：
+
+- clone 仓库后可以拿到当前主线代码
+- 但如果要完整复现本机上的文档解析能力，仍需要额外补齐本地模型资产和部分样例文件
+
+当前建议把 `models/` 视为“部署资产”而不是“源码”：
+
+- 开发协作时不进 Git
+- 新机器部署时单独补齐
+- 后续如需迁移环境，建议补一份模型资产准备说明或下载脚本
+
 ### 3. 启动服务
 
 ```bash
@@ -114,6 +147,7 @@ EMBEDDING_MODEL=
 ## 常用验证脚本
 
 ```bash
+./venv/bin/python scripts/ops/check_runtime_assets.py
 ./venv/bin/python scripts/seed/seed_demo_data.py
 ./venv/bin/python scripts/verify/verify_obsidian_vault_flow.py
 ./venv/bin/python scripts/verify/verify_business_doc_ingest_flow.py
@@ -122,6 +156,11 @@ EMBEDDING_MODEL=
 ./venv/bin/python scripts/verify/verify_project_autorun_flow.py
 ./venv/bin/python scripts/verify/verify_embedding_runtime.py
 ```
+
+建议：
+
+- 新机器 clone 后先执行 `./venv/bin/python scripts/ops/check_runtime_assets.py`
+- 如果缺少 `models/` 或超大样例文档，说明当前环境拿到的是“源码基线”，不是“服务器完整运行镜像”
 
 ## 关键接口
 
@@ -162,6 +201,11 @@ alembic/     数据库迁移
 assets/      运行期提取图片等派生产物
 data/        当前保留的运行期资产目录
 ```
+
+补充说明：
+
+- `models/` 不在当前 GitHub 仓库版本控制中，属于大体积本地运行时资产
+- `assets/`、`data/` 中的内容也以运行期产物为主，不保证远端仓库包含服务器上的全部现状
 
 ## 相关文档
 
