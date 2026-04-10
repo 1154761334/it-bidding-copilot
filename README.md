@@ -220,6 +220,7 @@ data/        当前保留的运行期资产目录
 - [docs/site_function_audit.md](/root/it-bidding-copilot/docs/site_function_audit.md)
 - [docs/design_requirement_matrix.md](/root/it-bidding-copilot/docs/design_requirement_matrix.md)
 - [docs/main_flow_task_list.md](/root/it-bidding-copilot/docs/main_flow_task_list.md)
+- [docs/p0_recovery_plan.md](/root/it-bidding-copilot/docs/p0_recovery_plan.md)
 - [docs/development_logs/README.md](/root/it-bidding-copilot/docs/development_logs/README.md)
 
 ## License

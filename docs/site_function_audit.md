@@ -152,19 +152,15 @@ cd frontend && PLAYWRIGHT_BASE_URL='http://127.0.0.1:20031' npx playwright test
 ./venv/bin/python -m pytest -q
 ```
 
-历史文档结果：
-
-- `52 passed`
-
 本次重新核验结果：
 
-- `./venv/bin/python -m pytest -q --maxfail=8` -> `8 failed, 8 passed`
-- 失败集中在 `DraftingReviewService` / `drafting_v2` 与 `EnterpriseAssetService`
-- 说明当前后端回归基线已经失真，需先修复服务层与测试预期漂移
+- `./venv/bin/python -m pytest -q --maxfail=8` -> `54 passed`
+- `cd frontend && npm run build` -> 通过
+- 说明后端与前端构建基线当前已恢复，后续重点应转回页面主流程收口与浏览器回归验证
 
 ## 剩余建议
 
 1. 继续补“上传真实采购文件 -> analyze”浏览器用例
 2. 继续补“整项目自动续写 -> 章节完成状态变化”浏览器用例
 3. 继续补“终审后导出 docx 文件存在性”浏览器用例
-4. 对 `/config/capabilities` 当前返回的模型名与文档默认值做一次配置一致性核对
+4. 伴随 `/rfp` 确认工作台变更，重新执行针对性 Playwright 回归

@@ -16,12 +16,13 @@
 本次已基于 `docs/` 与当前代码做了一轮交叉核对，结论如下：
 
 - 主线方向没有问题：当前真实入口仍是 `main.py -> api/routers/*` 与 `frontend/src/App.tsx`
-- 前端页面层已经基本按产品流程铺开，但部分页面依赖的后端返回结构与文档描述不完全一致
-- `EnterpriseAssetService`、`DraftingReviewService` 目前是可运行的简化版实现，能力明显弱于文档中描述的“完整产品化版本”
-- 当前 `pytest` 基线已经失真，不能再沿用“`53 passed` / `52 passed`”作为仓库真实状态
+- 前端页面层已经基本按产品流程铺开，本轮已补一批关键接口兼容字段，但文档仍需持续跟随代码更新
+- `EnterpriseAssetService`、`DraftingReviewService` 仍属于“够用优先”的实现，并非完整产品化版本，但已对齐当前前端主页面所需的核心字段
+- 当前 `pytest` 基线应以最新实测结果为准，不能再沿用历史对话中的 `53 passed` / `52 passed` / `8 failed, 8 passed` 口径
 - 现有文档中关于 Playwright、真实联调、页面巡检的大部分记录可视为“历史曾完成”，但不应再默认代表当前代码状态
 - 当前 GitHub 仓库已推送最新源码基线，但未包含服务器上的全部运行时大资产，尤其是 `models/` 与超大样例文档
 - 已新增 `scripts/ops/check_runtime_assets.py`，用于在新机器上快速检查关键运行时资产是否齐备
+- 已新增 P0 收口计划文档：`docs/p0_recovery_plan.md`
 
 ## 1.2 协作方式补充说明
 
@@ -95,6 +96,7 @@
 - 已为企业资产中心新增“企业建库确认”检查区，明确企业资料是否具备新建投标项目条件
 - 已为企业资产中心新增“本轮新入库资产待确认”批次摘要，区分最新导入批次与历史资产
 - 已为采购文件识别新增“分析结果确认保存”接口与前端确认区，支持修正项目信息和关键要求后正式确认建档
+- 已将 `RFPAnalysis` 进一步收口为确认工作台第一阶段，补齐“预览 / 正式基线”状态表达、确认总览和进入偏离矩阵的阻塞说明
 - 已将 `/deviation` 页面接入“分析未确认禁止进入下一步”的步骤提示
 - 已将编标大厅接入“项目素材包”步骤，可在起草前确认资质、案例、人员与补充材料
 - 已为编标大厅新增素材智能推荐、补充材料上传和素材确认前生成拦截
@@ -104,18 +106,19 @@
 - `ManualProfile` 当前已明确收口为“企业主体基础信息维护页”，不再承载证书/案例/人员的新增维护职责
 - `EnterpriseAI` 当前已承接企业资产浏览、筛选、详情查看以及证书/案例/人员 CRUD 主入口
 - `RFPAnalysis` 真实接入了项目恢复、`analysis-check` 展开和分析确认建档
+- 已新增下一轮执行计划文档：`docs/next_iteration_plan.md`
 - `BiddingHall` 当前已接入章节大纲、项目级批量生成、素材包读取、在线正文保存和补充材料上传入口
 
 ## 2.1 代码核对后确认的现实约束
 
-以下内容不是“未做”，而是“当前代码实现比文档口径更弱或更简化”：
+以下内容不是“未做”，而是“当前代码实现仍以主流程收口为主，能力比理想化产品文档更简化”：
 
 - `DraftingReviewService.run_red_team_review` 当前是同步简化实现，仅返回基础 `section_reviews`，没有文档中描述的完整结构化审标摘要
-- `DraftingReviewService.build_export_readiness` 当前仅检查章节完成与项目状态，尚未覆盖文档中提到的采购母版、图片证据、被拦截章节详情等完整 readiness 细项
-- `EnterpriseAssetService.build_assets_overview` 当前只稳定返回 counts 和证书列表，尚未达到文档中“证书/案例/人员/源文件/图片完整汇总”的详细结构
-- `EnterpriseAssetService.build_latest_ingest_batch` 当前只返回最近批次日期和源文件列表，尚未稳定返回文档中提到的批次统计摘要
-- `DraftingMaterialService.build_materials_pack` 当前返回结构是 `state/recommendations/available` 的简化版，和前端 `ProjectMaterialsPack` 类型定义并未完全对齐
-- `BiddingHall` 中选区 AI 改写仍调用 `/api/v2/drafting/...`，与当前后端 `/api/v1/bid/draft/{draft_id}/rewrite` 不一致，说明该能力仍未真正收口
+- `DraftingReviewService.build_export_readiness` 当前已覆盖章节完成状态、项目状态、采购母版、图片证据统计和被拦截章节详情，但检查维度仍可继续细化
+- `EnterpriseAssetService.build_assets_overview` 当前已返回 counts、证书、案例、人员、源文件与图片摘要，但尚未达到完整资产工作台的深度明细
+- `EnterpriseAssetService.build_latest_ingest_batch` 当前已返回最近批次日期、源文件列表、累计统计与提示信息，但“仅本轮新增”的精确统计仍未独立建模
+- `DraftingMaterialService.build_materials_pack` 当前已对齐前端 `ProjectMaterialsPack` 主结构，但推荐理由、证据预览和更细人工确认操作仍未完成
+- `BiddingHall` 选区 AI 改写当前已走 `/api/v1/bid/draft/{draft_id}/rewrite`，但整章重写、压缩、对齐评分点等高级能力仍未收口
 
 ## 3. 已验证结果
 
@@ -178,12 +181,15 @@
 
 ## 3.1 本次重新核验结果
 
-本次仅对关键代码与后端单测基线做了重新核验，结果如下：
+本次重新核验并更新接口契约后的结果如下：
 
-- `./venv/bin/python -m pytest -q --maxfail=8` -> `8 failed, 8 passed`
-- 当前最明显的失败集中在两组：
-- `DraftingReviewService` / `drafting_v2`：测试期望的审标摘要、导出前检查、辅助函数接口与当前实现不一致
-- `EnterpriseAssetService`：测试期望的资产总览、资产浏览、建库 readiness、最新批次摘要能力强于当前实现
+- `./venv/bin/python -m pytest -q --maxfail=8` -> `54 passed`
+- `cd frontend && npm run build` -> 通过
+- 本轮已补齐一批前后端契约字段：
+- 企业资产建库 readiness 现稳定返回 `warnings`
+- 最近导入批次现稳定返回 `notes`、更完整的 `source_documents`
+- 项目素材包现与前端 `ProjectMaterialsPack` 主结构对齐
+- 导出 readiness 现稳定返回 `project_name` 与 `project_status`
 
 本次未重新执行以下验证，因此不再把它们视为“当前代码已再次确认通过”：
 
@@ -286,11 +292,9 @@
 
 下一轮工作建议按下面顺序推进：
 
-1. 先修复 `DraftingReviewService`、`EnterpriseAssetService` 与对应路由辅助函数的测试回归，恢复一个可信的后端基线
-2. 对齐前端类型、页面使用方式与后端真实返回结构，优先收 `materials-pack`、`export-readiness`、`assets-overview`
-3. 修正 `BiddingHall` 中仍残留的旧接口路径和未闭环交互，避免“页面有入口但功能未真正可用”
-4. 在回归恢复后，再继续收紧采购文件 requirement 噪声，提升偏离矩阵和章节生成输入质量
-5. 继续加强“商务技术文件 -> 企业资质库”字段归一化，补证书编号、有效期、颁发单位
-6. 为 Ark 单独选定一个兼容的 `EMBEDDING_MODEL`，恢复真实向量检索能力
-7. 推进模板保样式导出，并把已提取的图片证据插入最终文档
-8. 在代码和测试重新稳定后，再补“真实上传采购文件 / 整项目自动续写 / 最终导出文件落地”浏览器用例
+1. 先把“企业资质解析”和“采购文件解析”的验收口径统一到“实战可用”，详见 `docs/parsing_quality_bar.md`
+2. 继续打磨企业资质解析质量，重点关注人员抽取精度、案例泛化、字段归一化和 PDF 样本实测
+3. 继续打磨采购文件解析质量，重点关注 requirement 降噪、评分项 / 红线项漏抽和资产匹配解释力
+4. 在此基础上推进多公司 / 多项目上下文，不再默认绑定主公司 / 最新项目
+5. 继续收 `/rfp` 确认工作台，让“预览 / 已确认”状态边界更清晰
+6. 在解析与上下文稳定后，再继续编标、审标和导出质量增强

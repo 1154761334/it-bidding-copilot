@@ -39,10 +39,10 @@
 | 企业资产中心 | Obsidian Vault 导入 | `done` | `vault-ingest` 已验证 | 前端未接该入口 | 后续加入口或运维页 |
 | 企业资产中心 | 商务技术文件预提资质 | `done` | `business-doc-ingest` 已验证，证书已补等级与日期字段，并新增二次清洗、去重和实名人员拆解 | 发证单位等字段仍未统一 | 后续继续归一化 |
 | 企业资产中心 | 手工补录企业信息 | `done` | `ManualProfile` 当前只维护企业主体基础信息，已接 `profile` 读写 | 不再承载资产 CRUD | 保持职责单一 |
-| 企业资产中心 | 企业资产结构化展示 | `partial` | 页面已接入 `assets-overview`、`assets-browser`、详情面板与图片预览 | 当前 `EnterpriseAssetService` 返回结构偏简化，与文档口径不完全一致 | 先补服务层与前端契约 |
+| 企业资产中心 | 企业资产结构化展示 | `partial` | 页面已接入 `assets-overview`、`assets-browser`、详情面板与图片预览，服务层已补 counts/证书/案例/人员/源文件/图片摘要与编辑所需元字段 | 仍缺更深的资产详情、批次视图与来源治理 | 继续补深度明细与批次级确认 |
 | 企业资产中心 | 证书/案例/人员维护 | `done` | `EnterpriseAI` 已支持新增、编辑、删除和批量删除 | 暂未覆盖图片与源文件维护 | 后续评估扩展 |
 | 招标文件识别 | 上传与异步分析 | `done` | `rfp/analyze`、`status` 已接通 | 历史报告页未做 | 后续补项目历史视图 |
-| 招标文件识别 | 分析结果确认建档 | `partial` | `/rfp` 已支持修正项目信息和关键要求后确认建档，`analysis-confirm` 已接通 | 页面仍未拆成评分/资格/技术的分步确认工作台 | 继续收 Phase 2 |
+| 招标文件识别 | 分析结果确认建档 | `in_progress` | `/rfp` 已支持修正项目信息和关键要求后确认建档，`analysis-confirm` 已接通 | 页面仍需进一步收口为更清晰的确认工作台，并明确“预览 / 已确认”状态边界 | 当前优先推进 |
 | 招标文件识别 | 质量校验 `analysis-check` | `done` | 已接到 `RFPAnalysis` 页面并支持完整检查项展开 | 历史报告页未做 | 后续补项目历史视图 |
 | 招标文件识别 | Go/No-Go 决策展示 | `partial` | 已有基础结果展示 | 解释性和证据链仍偏弱 | 后续增强解释与来源 |
 | 偏离矩阵 | 只读偏离矩阵 | `done` | `deviation` 已接通 | 当前更像结果页 | 继续做确认与回写 |
@@ -51,33 +51,32 @@
 | 编标大厅 | 大纲获取 | `done` | `outline/{project_id}` 已接通 | 目录语义仍偏粗 | 后续按章节策略优化 |
 | 编标大厅 | 单章节生成 | `done` | `draft/{draft_id}` 已接通 | 正文展示还可增强 | 后续补证据与状态细节 |
 | 编标大厅 | 项目级批量生成 | `done` | 后端 `draft-all`、前端批量生成入口、批次进度展示和“仅重试未完成章节”入口已接通 | 仍缺更细的失败原因分类 | 后续补逐章原因标注 |
-| 编标大厅 | 项目素材包确认 | `partial` | 页面与 store 已接入素材包读取、保存、确认和补充材料上传入口 | 当前后端 `materials-pack` 返回结构与前端 `ProjectMaterialsPack` 类型未完全对齐 | 先统一接口契约 |
-| 编标大厅 | 在线 Markdown 改稿 | `partial` | 已支持当前章节在线编辑、保存和版本递增 | 选区 AI 改写仍走旧 `/api/v2` 路径，版本回看也未完成 | 继续推进 Phase 4 |
+| 编标大厅 | 项目素材包确认 | `done` | `DraftingMaterialService` 已与前端 `ProjectMaterialsPack` 主结构对齐，支持推荐、选择、补充材料与确认 | 推荐理由、证据预览仍可增强 | 保持稳定，后续做体验增强 |
+| 编标大厅 | 在线 Markdown 改稿 | `partial` | 已支持当前章节在线编辑、保存、版本递增和基于 `/api/v1/bid/draft/{draft_id}/rewrite` 的选区 AI 改写 | 版本回看、整章重写和更细操作面板仍未完成 | 继续推进 Phase 4 |
 | 编标大厅 | 章节证据链与审稿反馈 | `done` | 已展示当前章节 source fragments 与审稿反馈 | 证据命名仍偏原始 | 后续统一证据表达 |
 | 编标大厅 | WebSocket 流式日志 | `partial` | 已可连接和显示 | 角色面板仍偏理想化 | 保留基础日志，先不做复杂协作 |
 | 编标大厅 | 版本管理 | `planned` | 页面按钮占位 | 无后端设计 | 放后面 |
 | 编标大厅 | “接受采用” | `planned` | 页面按钮占位 | 无状态设计 | 放后面 |
-| 红队审标 | 审标结果展示 | `partial` | `bid/review/{project_id}` 已接通，页面已具备基础展示 | 当前 `DraftingReviewService` 为简化实现，返回结构弱于测试与文档预期 | 先恢复服务层完整性 |
+| 红队审标 | 审标结果展示 | `done` | `DraftingReviewService` 已稳定返回章节 verdict、胜率、风险与建议，足以支撑当前页面 | 仍非完整结构化审标工作台 | 保持稳定，后续再扩维度 |
 | 红队审标 | 证据链查看 | `partial` | 可展示 source fragments | 证据命名与来源仍偏粗 | 后续增强 |
 | 红队审标 | 审标后自动修复回写 | `planned` | 前端为禁用占位 | 后端暂无闭环接口 | 高级能力，后置 |
-| 终审导出 | 导出 Word | `partial` | `export-docx` 路由已存在，前端有导出入口 | 本次未重新完成端到端导出校验，且 review/readiness 服务实现弱于文档口径 | 先恢复后端基线再重跑联调 |
-| 终审导出 | 封标清单 | `partial` | 前端已接入 readiness 展示 | 当前 `build_export_readiness` 仅覆盖基础检查项，尚未与文档所述细项一致 | 补完整 readiness 结构 |
+| 终审导出 | 导出 Word | `done` | `BidExporter` 已支持 Markdown 样式转换与图片证据可读化，且具备导出前 readiness 强拦截 | 模板样式完美复用仍可继续精进 | 后续评估更复杂的模板合并 |
+| 终审导出 | 封标清单 | `done` | 前端已接入真实 readiness 展示，后端已返回项目信息、采购母版、图片证据和被拦截章节详情 | 仍可继续细化检查项文案 | 保持稳定 |
 | 设置 | 模型配置保存 | `done` | `/config`、`/config/update` 已可用，支持独立 `EMBEDDING_MODEL` 配置 | 推荐模型策略仍偏工程化 | 后续补推荐配置 |
 | 设置 | 模型连通性测试 | `done` | `/config/test-connection` 已可测 chat，配置 embedding 后也会同步校验向量模型 | 结果展示较基础 | 可后续优化 |
 | 设置 | 运行时能力展示 | `done` | `/config/capabilities` 已接入设置弹窗 | 展示仍偏工程化 | 后续优化文案与推荐项 |
 | 设置 | 模型默认推荐与 Ark 配置一致性 | `done` | 设置弹窗已切到 Ark / Doubao 默认口径 | embedding 推荐项仍偏通用 | 后续补更明确推荐 |
-| 全站巡检 | Playwright 浏览器回归 | `partial` | 文档记录中已覆盖主站 8 个页面、设置弹窗、企业资产 CRUD、项目素材包确认、编标改稿保存 | 本次未重跑，且当前后端单测已出现明显回归 | 后端基线恢复后重跑 |
+| 全站巡检 | Playwright 浏览器回归 | `partial` | 文档记录中已覆盖主站 8 个页面、设置弹窗、企业资产 CRUD、项目素材包确认、编标改稿保存 | 本次未重跑，但当前后端单测与前端 build 已恢复可信基线 | 伴随 `/rfp` 工作台变更后重跑 |
 
 ## 3. 当前建议优先级
 
-### P0：先恢复可信基线
+### P0：守住可信基线并推进主流程确认收口
 
-1. 修复 `DraftingReviewService` 与 `EnterpriseAssetService` 的测试回归
-2. 对齐前端类型和后端返回结构
-3. 清理 `BiddingHall` 中旧 `/api/v2` 残留接口
-4. 重新建立可信的 pytest 与页面巡检基线
-5. 再继续做采购 requirement 降噪、素材包体验和 embedding 联调
-说明：当前独立验证脚本仍有价值，但在服务层回归未修复前，不宜继续把历史联调结果当成当前稳定基线。
+1. 维持 `DraftingReviewService`、`EnterpriseAssetService`、`DraftingMaterialService` 的契约稳定
+2. 守住当前 `54 passed` 与前端 build 通过的基线
+3. 优先推进 `RFPAnalysis` 确认工作台，而不是提前进入版本管理等高级能力
+4. 页面改动后补回 Playwright 与真实模型抽样联调
+说明：当前重点已从“修回归”切到“守基线 + 收主流程确认环节”。
 
 ## 3.1 当前实施计划
 
@@ -114,6 +113,14 @@
 4. 修复 `/deviation` 错误依赖内存态
 5. 为设置弹窗补 `Escape` 关闭
 结果：已完成，详见 `docs/site_function_audit.md`
+
+### Iteration 5：RFP 确认工作台收口
+
+1. 把 `/rfp` 明确为“分析确认工作台”
+2. 明确“未确认仅预览 / 已确认建档”的状态边界
+3. 强化 `analysis-check` 与下一步 CTA 的关联表达
+4. 变更后补回归验证和状态文档
+当前进度：已开始，详见 `docs/next_iteration_plan.md`
 
 ### P1：产品化增强
 

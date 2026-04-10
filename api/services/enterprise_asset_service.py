@@ -27,6 +27,34 @@ class EnterpriseAssetService:
             .limit(5)
             .all()
         )
+        latest_cases = (
+             self.db.query(EnterpriseCase)
+            .filter(EnterpriseCase.company_id == company.id)
+            .order_by(EnterpriseCase.id.desc())
+            .limit(5)
+            .all()
+        )
+        latest_personnel = (
+             self.db.query(EnterprisePersonnel)
+            .filter(EnterprisePersonnel.company_id == company.id)
+            .order_by(EnterprisePersonnel.id.desc())
+            .limit(5)
+            .all()
+        )
+        latest_sources = (
+            self.db.query(SourceDocument)
+            .filter(SourceDocument.company_id == company.id)
+            .order_by(SourceDocument.id.desc())
+            .limit(5)
+            .all()
+        )
+        latest_images = (
+            self.db.query(CompanyAsset)
+            .filter(CompanyAsset.company_id == company.id, CompanyAsset.asset_type == "image")
+            .order_by(CompanyAsset.upload_date.desc())
+            .limit(5)
+            .all()
+        )
 
         return {
             "company_id": company.id,
@@ -38,9 +66,56 @@ class EnterpriseAssetService:
                 "images": image_count,
             },
             "certificates": [
-                {"id": c.id, "raw_name": c.raw_name, "cert_type": c.cert_type} for c in latest_certs
+                {
+                    "id": c.id,
+                    "raw_name": c.raw_name,
+                    "cert_type": c.cert_type,
+                    "cert_level": c.cert_level,
+                    "scope": c.certification_scope,
+                    "expiry_date": c.expiry_date.isoformat() if c.expiry_date else None,
+                    "image_url": c.image_url,
+                }
+                for c in latest_certs
             ],
-            # ... can add more latest items if needed
+            "cases": [
+                {
+                    "id": c.id,
+                    "project_name": c.project_name,
+                    "industry": c.industry,
+                    "contract_amount": c.contract_amount,
+                    "description": c.description,
+                }
+                for c in latest_cases
+            ],
+            "personnel": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "role": c.role,
+                    "level": c.level,
+                    "years_of_experience": c.years_of_experience,
+                    "social_security_image_url": c.social_security_image_url,
+                }
+                for c in latest_personnel
+            ],
+            "source_documents": [
+                {
+                    "id": d.id,
+                    "filename": d.filename,
+                    "file_type": d.file_type,
+                    "upload_date": d.upload_date.isoformat() if d.upload_date else None,
+                }
+                for d in latest_sources
+            ],
+            "images": [
+                {
+                    "id": asset.id,
+                    "asset_name": asset.asset_name,
+                    "asset_tag": asset.asset_tag,
+                    "local_path": asset.local_path,
+                }
+                for asset in latest_images
+            ],
         }
 
     def build_assets_browser(self, company: Company, asset_kind: str = "all", query: str = "") -> dict:
@@ -73,6 +148,9 @@ class EnterpriseAssetService:
                     "summary": cert.certification_scope or "未提供范围说明",
                     "meta": {
                         "record_id": cert.id,
+                        "cert_type": cert.cert_type,
+                        "cert_level": cert.cert_level,
+                        "certification_scope": cert.certification_scope,
                         "expiry_date": cert.expiry_date.isoformat() if cert.expiry_date else None,
                     },
                 })
@@ -95,7 +173,9 @@ class EnterpriseAssetService:
                     "summary": case.description or "未提供案例说明",
                     "meta": {
                         "record_id": case.id,
+                        "industry": case.industry,
                         "contract_amount": case.contract_amount,
+                        "compliance_keywords": case.compliance_keywords,
                     },
                 })
 
@@ -118,6 +198,8 @@ class EnterpriseAssetService:
                     "meta": {
                         "record_id": person.id,
                         "level": person.level,
+                        "years_of_experience": person.years_of_experience,
+                        "resume_text": person.resume_text,
                     },
                 })
 
@@ -179,7 +261,6 @@ class EnterpriseAssetService:
         case_count = self.db.query(EnterpriseCase).filter(EnterpriseCase.company_id == company.id).count()
         personnel_count = self.db.query(EnterprisePersonnel).filter(EnterprisePersonnel.company_id == company.id).count()
         source_count = self.db.query(SourceDocument).filter(SourceDocument.company_id == company.id).count()
-        image_count = self.db.query(CompanyAsset).filter(CompanyAsset.company_id == company.id, CompanyAsset.asset_type == "image").count()
         
         business_license_count = (
             self.db.query(EnterpriseCertificate)
@@ -225,12 +306,18 @@ class EnterpriseAssetService:
                 "detail": personnel_count,
             },
         ]
+        warnings = [
+            check["label"]
+            for check in checks
+            if not check["passed"]
+        ]
 
         return {
             "company_id": company.id,
             "company_name": company.company_name,
             "ready": all(check["passed"] for check in checks),
             "checks": checks,
+            "warnings": warnings,
         }
 
     def build_latest_ingest_batch(self, company: Company) -> dict:
@@ -249,12 +336,32 @@ class EnterpriseAssetService:
             .filter(SourceDocument.company_id == company.id, SourceDocument.upload_date == latest_date)
             .all()
         )
+
+        cert_count = self.db.query(EnterpriseCertificate).filter(EnterpriseCertificate.company_id == company.id).count() 
+        case_count = self.db.query(EnterpriseCase).filter(EnterpriseCase.company_id == company.id).count() 
+        image_count = self.db.query(CompanyAsset).filter(CompanyAsset.company_id == company.id, CompanyAsset.asset_type == "image").count()
         
         return {
             "company_id": company.id,
             "has_batch": True,
             "batch_date": latest_date.isoformat(),
+            "counts": {
+                "source_documents": len(source_documents),
+                "certificates": cert_count,
+                "cases": case_count,
+                "images": image_count,
+            },
             "source_documents": [
-                {"id": d.id, "filename": d.filename} for d in source_documents
-            ]
+                {
+                    "id": d.id,
+                    "filename": d.filename,
+                    "file_type": d.file_type,
+                    "local_path": d.local_path,
+                }
+                for d in source_documents
+            ],
+            "notes": [
+                "优先核对本轮新入库源文件与结构化结果是否准确。",
+                "当前批次统计为企业历史累计结果，不代表仅本轮新增数量。",
+            ],
         }

@@ -4,6 +4,24 @@ import { rfpService } from '../services/api';
 import { useRfpStore } from '../store/useRfpStore';
 import { useProjectContextStore } from '../store/useProjectContextStore';
 
+const formatCheckDetail = (detail: unknown) => {
+  if (detail === null || detail === undefined || detail === '') {
+    return '暂无详细信息';
+  }
+  if (typeof detail === 'string' || typeof detail === 'number' || typeof detail === 'boolean') {
+    return String(detail);
+  }
+  if (Array.isArray(detail)) {
+    return detail.length ? detail.map((item) => String(item)).join('，') : '暂无详细信息';
+  }
+  if (typeof detail === 'object') {
+    return Object.entries(detail as Record<string, unknown>)
+      .map(([key, value]) => `${key}: ${String(value)}`)
+      .join('；');
+  }
+  return String(detail);
+};
+
 const RFPAnalysis: React.FC = () => {
   const navigate = useNavigate();
   const { currentProjectId, bootstrapContext, setCurrentProjectName } = useProjectContextStore();
@@ -151,6 +169,58 @@ const RFPAnalysis: React.FC = () => {
   }, [activeTab, analysisResult, editingRequirements]);
 
   const analysisConfirmed = analysisResult?.project_status === 'ANALYSIS_CONFIRMED' || analysisResult?.project_status === 'DEVIATION_CONFIRMED';
+  const commercialCount = analysisResult?.commercial_requirements.length ?? 0;
+  const technicalCount = analysisResult?.technical_requirements.length ?? 0;
+  const vetoCount = analysisResult?.veto_clauses.length ?? 0;
+  const scoringCount = Object.keys(analysisResult?.scoring_system || {}).length;
+  const totalRequirements = commercialCount + technicalCount + vetoCount;
+  const qualityWarnings = analysisCheck?.quality_report.warnings ?? [];
+  const reviewNeeded = analysisCheck?.quality_report.status === 'needs_review';
+  const editedRequirementCount = React.useMemo(() => {
+    if (!analysisResult) return 0;
+
+    let totalEdited = 0;
+    const seen = new Set<number>();
+    const countIfChanged = (id: number, originalDescription: string, originalEvidence: string) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+
+      const edited = editingRequirements[id];
+      if (!edited) return;
+
+      const normalizedDescription = (edited.description || '').trim();
+      const normalizedEvidence = (edited.evidence_required || '').trim();
+      if (
+        normalizedDescription !== (originalDescription || '').trim() ||
+        normalizedEvidence !== (originalEvidence || '').trim()
+      ) {
+        totalEdited += 1;
+      }
+    };
+
+    analysisResult.commercial_requirements.forEach((item) => {
+      countIfChanged(item.id, item.item, item.evidence_required || '');
+    });
+    analysisResult.technical_requirements.forEach((item) => {
+      countIfChanged(item.id, item.required_value || item.item, item.evidence_required || '');
+    });
+    analysisResult.veto_clauses.forEach((item) => {
+      countIfChanged(item.id, item.requirement, item.evidence_required || '');
+    });
+
+    return totalEdited;
+  }, [analysisResult, editingRequirements]);
+  const tabDefinitions = [
+    { key: '商业资质', label: '商业资质', count: commercialCount },
+    { key: '技术规范', label: '技术规范', count: technicalCount },
+    { key: '废标条款', label: '废标条款', count: vetoCount },
+    { key: '评分标准', label: '评分标准', count: scoringCount },
+  ];
+  const nextStepBlockedReason = reviewNeeded
+    ? '当前 quality check 仍需人工复核，暂不允许进入偏离矩阵。'
+    : !analysisConfirmed && analysisResult
+      ? '当前仍是分析预览态，确认建档后才会作为正式项目基线。'
+      : null;
 
   return (
     <div className="flex-1 overflow-y-auto no-scrollbar bg-surface pt-8 pb-32 px-12">
@@ -161,7 +231,13 @@ const RFPAnalysis: React.FC = () => {
             <p className="text-secondary text-lg font-light">上传招标文件，AI 将自动提取核心商务与技术要点，并评估投标可行性。</p>
           </div>
           <div className="flex gap-4">
-              <button className="px-6 py-2 border border-zinc-200 rounded-lg text-sm font-bold hover:bg-zinc-50 transition-colors">查看历史报告</button>
+              <button
+                disabled
+                className="px-6 py-2 border border-zinc-200 rounded-lg text-sm font-bold text-zinc-400 bg-zinc-50 cursor-not-allowed"
+                title="历史报告页尚未进入当前迭代范围"
+              >
+                历史报告（后续）
+              </button>
               <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.doc,.docx" onChange={handleFileUpload} />
               <button 
                 onClick={() => fileInputRef.current?.click()}
@@ -178,18 +254,59 @@ const RFPAnalysis: React.FC = () => {
             {/* Left: Decomposition Tabs */}
             <div className="col-span-12 lg:col-span-8 space-y-8">
                 <div className="bg-white rounded-2xl border border-zinc-100 ambient-shadow overflow-hidden">
-                    <div className="flex border-b border-zinc-50 px-4">
-                        {['商业资质', '技术规范', '废标条款', '评分标准'].map((tab, idx) => (
+                    <div className="flex flex-wrap border-b border-zinc-50 px-4">
+                        {tabDefinitions.map((tab, idx) => (
                             <button 
                               key={idx} 
-                              onClick={() => setActiveTab(tab)}
-                              className={`px-6 py-4 text-sm font-bold tracking-tight transition-colors border-b-2 ${activeTab === tab ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-zinc-900'}`}
+                              onClick={() => setActiveTab(tab.key)}
+                              className={`px-6 py-4 text-sm font-bold tracking-tight transition-colors border-b-2 ${activeTab === tab.key ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-zinc-900'}`}
                             >
-                                {tab}
+                                <span>{tab.label}</span>
+                                <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${activeTab === tab.key ? 'bg-primary/10 text-primary' : 'bg-zinc-100 text-zinc-500'}`}>
+                                  {tab.count}
+                                </span>
                             </button>
                         ))}
                     </div>
                     <div className="p-8 space-y-6">
+                        {analysisResult && (
+                          <div className={`rounded-2xl border p-5 ${analysisConfirmed ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'}`}>
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">确认工作台状态</p>
+                                <p className="text-sm font-bold text-zinc-900">
+                                  {analysisConfirmed ? '当前采购文件分析结果已确认建档' : '当前结果仍处于预览态，尚未写入正式项目基线'}
+                                </p>
+                              </div>
+                              <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${analysisConfirmed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {analysisConfirmed ? '正式基线' : '仅预览'}
+                              </span>
+                            </div>
+                            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                              <div className="rounded-xl bg-white/80 px-4 py-3">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">要求总数</p>
+                                <p className="mt-2 text-xl font-black text-zinc-900">{totalRequirements}</p>
+                              </div>
+                              <div className="rounded-xl bg-white/80 px-4 py-3">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">已修改要求</p>
+                                <p className="mt-2 text-xl font-black text-zinc-900">{editedRequirementCount}</p>
+                              </div>
+                              <div className="rounded-xl bg-white/80 px-4 py-3">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">评分类别</p>
+                                <p className="mt-2 text-xl font-black text-zinc-900">{scoringCount}</p>
+                              </div>
+                              <div className="rounded-xl bg-white/80 px-4 py-3">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">质量警告</p>
+                                <p className={`mt-2 text-xl font-black ${qualityWarnings.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{qualityWarnings.length}</p>
+                              </div>
+                            </div>
+                            {!analysisConfirmed && (
+                              <p className="mt-4 text-xs font-medium text-amber-800">
+                                未确认前，这些修改仅作为当前分析预览，不应被视为后续偏离矩阵与编标阶段的正式输入。
+                              </p>
+                            )}
+                          </div>
+                        )}
                         {analysisResult && (
                           <div className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-5">
                             <div className="mb-4 flex items-center justify-between gap-4">
@@ -210,6 +327,13 @@ const RFPAnalysis: React.FC = () => {
                                 >
                                   {isSavingConfirm ? '保存中...' : '确认分析结果'}
                                 </button>
+                                <button
+                                  onClick={() => navigate('/deviation')}
+                                  disabled={!analysisConfirmed || reviewNeeded}
+                                  className="rounded-xl border border-zinc-200 bg-white px-5 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  进入偏离矩阵
+                                </button>
                               </div>
                             </div>
                             <div className="grid gap-4 md:grid-cols-3">
@@ -227,6 +351,7 @@ const RFPAnalysis: React.FC = () => {
                               </label>
                             </div>
                             {confirmMessage ? <p className="mt-3 text-xs font-bold text-primary">{confirmMessage}</p> : null}
+                            {nextStepBlockedReason ? <p className="mt-3 text-xs font-medium text-zinc-500">{nextStepBlockedReason}</p> : null}
                           </div>
                         )}
                         {analysisCheck && (
@@ -274,7 +399,7 @@ const RFPAnalysis: React.FC = () => {
                                         {check.passed ? 'passed' : 'review'}
                                       </span>
                                     </div>
-                                    <p className="mt-1 text-[11px] font-medium text-zinc-500 break-words">{JSON.stringify(check.detail)}</p>
+                                    <p className="mt-1 text-[11px] font-medium text-zinc-500 break-words">{formatCheckDetail(check.detail)}</p>
                                   </div>
                                 ))}
                               </div>
@@ -282,7 +407,21 @@ const RFPAnalysis: React.FC = () => {
                           </div>
                         )}
                         <div className="bg-zinc-50/50 rounded-xl p-6 border border-zinc-50 min-h-[300px]">
-                            <h4 className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-4">关键提取指标</h4>
+                            <div className="mb-4 flex items-center justify-between gap-4">
+                              <div>
+                                <h4 className="text-xs font-black text-zinc-400 uppercase tracking-widest">关键提取指标</h4>
+                                <p className="mt-1 text-[11px] font-medium text-zinc-500">
+                                  {activeTab === '评分标准'
+                                    ? `当前共识别 ${scoringCount} 类评分项。`
+                                    : `当前分区共 ${activeRequirements.length} 条待确认要求。`}
+                                </p>
+                              </div>
+                              {analysisResult && activeTab !== '评分标准' && (
+                                <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                                  {activeRequirements.length} items
+                                </span>
+                              )}
+                            </div>
                             
                             {!analysisResult ? (
                               <div className="flex flex-col items-center justify-center h-48 text-zinc-400 space-y-4">
@@ -381,6 +520,58 @@ const RFPAnalysis: React.FC = () => {
                         )}
                     </div>
                     <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-primary/20 blur-[100px] rounded-full group-hover:bg-primary/30 transition-all"></div>
+                </div>
+
+                <div className="rounded-3xl border border-zinc-100 bg-white p-6">
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-bold tracking-tight">确认总览</h3>
+                            <p className="mt-1 text-xs font-medium text-zinc-500">按这个顺序完成确认，主流程会更稳定。</p>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${analysisConfirmed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {analysisConfirmed ? '已确认' : '待确认'}
+                        </span>
+                    </div>
+                    <div className="space-y-3">
+                        {[
+                          { label: '采购文件已识别', passed: Boolean(analysisResult), detail: analysisResult?.project_name || '请先上传并解析标书' },
+                          {
+                            label: '质量校验已通过',
+                            passed: Boolean(analysisCheck && analysisCheck.quality_report.status === 'passed'),
+                            detail: analysisCheck ? `${analysisCheck.quality_report.passed_checks}/${analysisCheck.quality_report.total_checks}` : '等待分析结果',
+                          },
+                          {
+                            label: '项目已确认建档',
+                            passed: Boolean(analysisConfirmed),
+                            detail: analysisConfirmed ? '当前结果已作为正式项目基线' : '未确认前仅作为预览结果',
+                          },
+                          {
+                            label: '可进入偏离矩阵',
+                            passed: Boolean(analysisResult && analysisConfirmed && !reviewNeeded),
+                            detail: nextStepBlockedReason || '下一步可进入偏离矩阵确认',
+                          },
+                        ].map((item) => (
+                          <div key={item.label} className="rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3">
+                            <div className="flex items-center justify-between gap-4">
+                              <p className="text-sm font-bold text-zinc-900">{item.label}</p>
+                              <span className={`text-[10px] font-black uppercase tracking-widest ${item.passed ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                {item.passed ? 'done' : 'pending'}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[11px] font-medium text-zinc-500">{item.detail}</p>
+                          </div>
+                        ))}
+                    </div>
+                    {qualityWarnings.length > 0 && (
+                      <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">当前质量警告</p>
+                        <div className="mt-2 space-y-2">
+                          {qualityWarnings.slice(0, 3).map((warning, idx) => (
+                            <p key={idx} className="text-[11px] font-medium text-amber-900">{warning}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                 </div>
             </div>
         </div>

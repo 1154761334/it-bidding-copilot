@@ -100,15 +100,21 @@ class BidExporter:
         doc.add_page_break()
         doc.add_heading("章节证据附录", level=1)
         for draft in drafts:
-             if draft.source_fragments:
-                  doc.add_heading(f"章节：{draft.section_title}", level=2)
-                  for frag in draft.source_fragments:
-                       doc.add_paragraph(frag)
-                       # 识别图片证据标识并标注
-                       if "[IMAGE:" in frag:
-                            img_path = re.search(r"\[IMAGE:(.*?)\]", frag)
-                            if img_path:
-                                 doc.add_paragraph(f"图片证据：{os.path.basename(img_path.group(1))}", style='Caption')
+            if draft.source_fragments:
+                doc.add_heading(f"章节：{draft.section_title}", level=2)
+                for frag in draft.source_fragments:
+                    clean_frag = frag
+                    img_matches = list(re.finditer(r"\[IMAGE:(.*?)\]", frag))
+                    
+                    for match in img_matches:
+                        img_name = os.path.basename(match.group(1))
+                        clean_frag = clean_frag.replace(match.group(0), f"(见附图：{img_name})")
+                    
+                    doc.add_paragraph(clean_frag)
+                    
+                    for match in img_matches:
+                        img_name = os.path.basename(match.group(1))
+                        cap = doc.add_paragraph(f"凭证凭证 - 图片证据：{img_name}", style='Caption')
 
         save_dir = "/root/it-bidding-copilot/exports"
         os.makedirs(save_dir, exist_ok=True)
@@ -119,42 +125,69 @@ class BidExporter:
 
     def _render_markdown_to_subdoc(self, doc, content: str):
         """
-        将 Markdown 片段渲染到 subdoc 中 (简单实现：处理标题、列表、表格和正文)
+        将 Markdown 片段渲染到文档中，支持标题、列表、表格和基础行内样式。
         """
-        # 简单表格识别逻辑
+        # 1. 提取并标记表格
         table_matches = re.findall(r"(\|.*\|(?:\n\|.*\|)+)", content)
-        
         remaining_text = content
         for table_str in table_matches:
             remaining_text = remaining_text.replace(table_str, f"\n[TABLE_MARKER_{hash(table_str)}]\n")
             
         lines = remaining_text.split('\n')
         for line in lines:
-            line = line.strip()
-            if not line:
+            line_stripped = line.strip()
+            if not line_stripped:
                 continue
                 
-            if line.startswith('[TABLE_MARKER_'):
-                target_hash = int(line[14:-1])
-                for t_str in table_matches:
-                    if hash(t_str) == target_hash:
-                        rows = [r.strip().split('|')[1:-1] for r in t_str.split('\n') if '|' in r and '---' not in r]
-                        if rows:
-                            table = doc.add_table(rows=len(rows), cols=len(rows[0]))
-                            table.style = 'Table Grid'
-                            for r_idx, row_data in enumerate(rows):
-                                for c_idx, val in enumerate(row_data):
-                                    table.cell(r_idx, c_idx).text = val.strip()
+            # 处理表格标记
+            if line_stripped.startswith('[TABLE_MARKER_'):
+                try:
+                    target_hash = int(line_stripped[14:-1])
+                    for t_str in table_matches:
+                        if hash(t_str) == target_hash:
+                            rows = [r.strip().split('|')[1:-1] for r in t_str.split('\n') if '|' in r and '---' not in r]
+                            if rows:
+                                table = doc.add_table(rows=len(rows), cols=len(rows[0]))
+                                table.style = 'Table Grid'
+                                for r_idx, row_data in enumerate(rows):
+                                    for c_idx, val in enumerate(row_data):
+                                        self._add_formatted_text(table.cell(r_idx, c_idx).paragraphs[0], val.strip())
+                except (ValueError, IndexError):
+                    pass
                 continue
 
-            if line.startswith('### '):
-                doc.add_heading(line[4:], level=3)
-            elif line.startswith('## '):
-                doc.add_heading(line[3:], level=2)
-            elif line.startswith('- ') or line.startswith('* '):
-                doc.add_paragraph(line[2:], style='List Bullet')
+            # 处理标题
+            if line_stripped.startswith('### '):
+                doc.add_heading(line_stripped[4:], level=3)
+            elif line_stripped.startswith('## '):
+                doc.add_heading(line_stripped[3:], level=2)
+            elif line_stripped.startswith('# '):
+                doc.add_heading(line_stripped[2:], level=1)
+            # 处理列表
+            elif line_stripped.startswith('- ') or line_stripped.startswith('* '):
+                p = doc.add_paragraph(style='List Bullet')
+                self._add_formatted_text(p, line_stripped[2:])
+            elif re.match(r'^\d+\. ', line_stripped):
+                p = doc.add_paragraph(style='List Number')
+                self._add_formatted_text(p, re.sub(r'^\d+\. ', '', line_stripped))
+            # 普通正文
             else:
-                doc.add_paragraph(line)
+                p = doc.add_paragraph()
+                self._add_formatted_text(p, line)
+
+    def _add_formatted_text(self, paragraph, text: str):
+        """
+        处理行内样式：**bold**, *italic*, 以及基础文本。
+        """
+        # 简单的正则替换逻辑
+        parts = re.split(r'(\*\*.*?\*\*|\*.*?\*)', text)
+        for part in parts:
+            if part.startswith('**') and part.endswith('**'):
+                paragraph.add_run(part[2:-2]).bold = True
+            elif part.startswith('*') and part.endswith('*'):
+                paragraph.add_run(part[1:-1]).italic = True
+            else:
+                paragraph.add_run(part)
 
     def _resolve_master_template(self, project: RFPProject) -> str | None:
         if not project.rfp_source_id:

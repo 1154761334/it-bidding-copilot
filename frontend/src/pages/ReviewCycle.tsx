@@ -131,6 +131,31 @@ const ReviewCycle = () => {
              </div>
            )}
 
+           {reviewData && (
+             <div className="space-y-4 animate-in fade-in slide-in-from-left-4">
+                <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl">
+                   <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-3">Winning Highlights</p>
+                   <ul className="space-y-2">
+                     {(reviewData.winning_highlights || []).map((h, i) => (
+                       <li key={i} className="text-xs font-bold text-emerald-800 flex items-center gap-2">
+                         <div className="w-1 h-1 rounded-full bg-emerald-400"></div> {h}
+                       </li>
+                     ))}
+                   </ul>
+                </div>
+                <div className="bg-zinc-50 border border-zinc-200 p-6 rounded-3xl">
+                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Optimization Suggestions</p>
+                   <ul className="space-y-2">
+                     {(reviewData.optimization_suggestions || []).map((s, i) => (
+                       <li key={i} className="text-xs font-medium text-zinc-600 flex items-center gap-2">
+                         <ArrowRight size={10} className="text-zinc-300" /> {s}
+                       </li>
+                     ))}
+                   </ul>
+                </div>
+             </div>
+           )}
+
             <section className="bg-neutral text-neutral-content p-8 rounded-3xl shadow-xl overflow-hidden relative">
                <div className="relative z-10">
                   <h3 className="text-xs font-black uppercase tracking-widest mb-6 opacity-60 flex items-center gap-2">

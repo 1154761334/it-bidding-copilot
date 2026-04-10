@@ -1,7 +1,5 @@
 import React, { useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
-// @ts-ignore
-import { BubbleMenu } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
@@ -122,6 +120,25 @@ const TiptapEditor: React.FC<TiptapEditorProps> = ({
         >
           <TableIcon size={16} />
         </button>
+        {onAIRewrite && (
+          <>
+            <div className="w-px h-4 bg-zinc-200 mx-1"></div>
+            <button
+              onClick={() => {
+                const selection = editor.state.selection;
+                const text = editor.state.doc.textBetween(selection.from, selection.to);
+                if (text.trim()) {
+                  onAIRewrite(text);
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-200 transition-colors text-zinc-600"
+              title="AI 润色当前选区"
+            >
+              <Wand2 size={16} />
+              <span className="text-xs font-bold">AI 润色选区</span>
+            </button>
+          </>
+        )}
         <div className="flex-1"></div>
         <button
           onClick={() => editor.chain().focus().undo().run()}
@@ -135,40 +152,6 @@ const TiptapEditor: React.FC<TiptapEditorProps> = ({
       {/* Editor Content */}
       <div className="relative">
         <EditorContent editor={editor} />
-        
-        {/* Bubble Menu for AI Rewrite */}
-        {editor && (
-          <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
-            <div className="flex items-center gap-1 bg-zinc-900 text-white rounded-xl p-1 shadow-xl border border-white/10 ring-4 ring-black/5 scale-90 sm:scale-100 origin-bottom">
-              <button
-                onClick={() => {
-                  const selection = editor.state.selection;
-                  const text = editor.state.doc.textBetween(selection.from, selection.to);
-                  if (onAIRewrite && text) {
-                    onAIRewrite(text);
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-xs font-bold whitespace-nowrap"
-              >
-                <Wand2 size={12} className="text-primary" />
-                AI 润色选区
-              </button>
-              <div className="w-px h-4 bg-white/20 mx-1"></div>
-              <button
-                onClick={() => editor.chain().focus().toggleBold().run()}
-                className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors ${editor.isActive('bold') ? 'text-primary' : ''}`}
-              >
-                <Bold size={12} />
-              </button>
-              <button
-                onClick={() => editor.chain().focus().toggleItalic().run()}
-                className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors ${editor.isActive('italic') ? 'text-primary' : ''}`}
-              >
-                <Italic size={12} />
-              </button>
-            </div>
-          </BubbleMenu>
-        )}
       </div>
 
       {/* Footer Info */}

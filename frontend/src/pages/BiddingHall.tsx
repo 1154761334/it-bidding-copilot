@@ -96,7 +96,7 @@ const BiddingHall: React.FC = () => {
   const handleAIRewrite = async (selectedText: string) => {
     if (!activeChapter) return;
     try {
-      const response = await fetch(`/api/v2/drafting/draft/${activeChapter}/rewrite`, {
+      const response = await fetch(`/api/v1/bid/draft/${activeChapter}/rewrite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: selectedText }),

@@ -13,8 +13,7 @@ from api.models.rfp_v2 import RFPProject, RFPRequirement
 from api.services.model_runtime_service import build_parser_trace, get_model_runtime_info
 from api.services.task_registry import task_registry
 from utils.asset_matcher import AssetMatcher
-from utils.docling_wrapper import DoclingWrapper
-from utils.rfp_analyzer import RFPAnalyzer
+from api.engines.rfp_analyzer import RFPAnalyzer
 
 logger = get_logger("rfp_analysis_service")
 
@@ -263,11 +262,13 @@ async def _run_rfp_analysis_task(*, task_id: str, company_id: int, filename: str
         logger.info("Starting async analysis for file: %s", filename)
 
         await task_registry.update(task_id, status="running", stage="parsing_document")
-        parser = DoclingWrapper()
-        parse_result = await asyncio.to_thread(parser.convert, local_path)
+        from api.services.document_parse_service import DocumentParseService
+        parser_service = DocumentParseService(db)
+        parse_result = await parser_service.parse(source_doc.id)
+        
         analysis_trace = {
             "model_runtime": get_model_runtime_info(),
-            "parser": build_parser_trace(strategy="docling_wrapper", parse_result=parse_result),
+            "parser": build_parser_trace(strategy="document_parse_service", parse_result=parse_result),
         }
 
         await task_registry.update(task_id, status="running", stage="extracting_project_meta")
@@ -323,7 +324,7 @@ async def _run_rfp_analysis_task(*, task_id: str, company_id: int, filename: str
                 max_score=req_data["max_score"],
                 evidence_required=req_data.get("evidence_required"),
             )
-            matcher.match_requirement(requirement, company_id)
+            await matcher.match_requirement(requirement, company_id)
             db.add(requirement)
             final_requirements.append(requirement)
 

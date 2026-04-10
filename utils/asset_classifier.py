@@ -1,7 +1,6 @@
 import os
 from typing import Literal, Dict, List
-from utils.docling_wrapper import DoclingWrapper
-from api.services.document_parse_service import DocumentParseService
+from typing import Literal, Dict, List
 import json
 
 AssetType = Literal["CASE", "CERTIFICATE", "PERSONNEL", "GENERAL"]
@@ -13,14 +12,14 @@ class AssetClassifier:
     """
     def __init__(self, model_name="gpt-4o"):
         self.model_name = model_name
-        self.pdf_parser = DocumentParseService()
-        self.docling_parser = DoclingWrapper()
     
     def classify(self, content_markdown: str, filename: str) -> AssetType:
         """
         根据内容特征进行分类。
         """
         content_lower = content_markdown.lower()
+        if not content_lower:
+            return "GENERAL"
         fn_lower = filename.lower()
         
         if any(kw in content_lower or kw in fn_lower for kw in ["简历", "工程师", "职员", "从业经历", "社保"]):
@@ -32,28 +31,25 @@ class AssetClassifier:
             
         return "GENERAL"
 
-    async def auto_ingest(self, file_path: str):
+    async def auto_ingest(self, db: any, source_doc_id: int):
         """
         集成解析与智能分类的完整流水线。
         """
-        filename = os.path.basename(file_path)
-        ext = os.path.splitext(filename)[1].lower()
+        from api.services.document_parse_service import DocumentParseService
+        parser_service = DocumentParseService(db)
         
-        if ext == ".pdf":
-            parse_result = self.pdf_parser.parse_pdf(file_path)
-            # Read markdown
-            with open(parse_result["markdown_file"], "r", encoding="utf-8") as f:
-                md = f.read()
-            # Read content list for chunks
-            with open(parse_result["content_list_file"], "r", encoding="utf-8") as f:
-                content_list = json.load(f)
-            
-            chunks = self._extract_chunks_from_mineru(content_list)
+        parse_result = await parser_service.parse(source_doc_id)
+        md = parse_result["raw_markdown"]
+        filename = parse_result["document_meta"]["filename"]
+        
+        # Determine chunks
+        # If we had MinerU, we'd use its content_list. 
+        # For Phase A (Docling), we use markdown chunking.
+        if parse_result["backend"] == "MinerU":
+            # This part will be enhanced in Phase B
+            chunks = [] 
         else:
-            parse_data = self.docling_parser.convert(file_path)
-            md = parse_data["markdown"]
             chunks = self._chunk_markdown(md)
-            parse_result = parse_data
 
         asset_type = self.classify(md, filename)
         

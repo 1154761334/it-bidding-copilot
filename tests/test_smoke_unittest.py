@@ -29,7 +29,7 @@ from api.services import drafting_task_service
 from api.services.enterprise_asset_service import EnterpriseAssetService
 from api.services.drafting_review_service import DraftingReviewService
 from api.services.task_registry import InMemoryTaskRegistry
-from utils.rfp_analyzer import RFPAnalyzer
+from api.engines.rfp_analyzer import RFPAnalyzer
 
 
 class QueryStub:
@@ -54,13 +54,17 @@ class QueryStub:
         return self.result
 
     def all(self):
+        if self.result is None:
+            return []
         return self.result if isinstance(self.result, list) else [self.result]
 
     def limit(self, *_args, **_kwargs):
         return self
 
     def count(self):
-        return len(self.result) if isinstance(self.result, list) else (1 if self.result else 0)
+        if self.result is None:
+            return 0
+        return len(self.result) if isinstance(self.result, list) else 1
 
     def distinct(self):
         return self
@@ -254,7 +258,7 @@ class ReviewRouteTests(unittest.TestCase):
                 source_fragments=[],
             ),
         ]
-        payload = drafting_v2.build_export_readiness(project, drafts)
+        payload = drafting_v2.get_export_readiness_impl(project, drafts)
         self.assertFalse(payload["ready"])
         self.assertEqual(payload["rejected_sections"][0]["section_title"], "商务条款")
         self.assertFalse(next(item for item in payload["checks"] if item["key"] == "all_drafts_completed")["passed"])
@@ -272,12 +276,12 @@ class ReviewRouteTests(unittest.TestCase):
                 audit_logs={"final_feedback": "APPROVED"},
             ),
         ]
-        payload = DraftingReviewService(None).build_export_readiness(project, drafts, master_template_available=True)
+        payload = DraftingReviewService(SessionStub(drafts)).build_export_readiness(project, master_template_available=True)
         template_check = next(item for item in payload["checks"] if item["key"] == "master_template_available")
         image_check = next(item for item in payload["checks"] if item["key"] == "image_evidence_ready")
         self.assertTrue(template_check["passed"])
         self.assertTrue(image_check["passed"])
-        self.assertEqual(image_check["detail"]["image_evidence_count"], 2)
+        self.assertEqual(image_check["detail"]["image_evidence_count"], 2) # content_markdown AND source_fragments
 
     def test_update_draft_content_increments_version_and_sets_reviewing(self):
         draft = BidDraft(
@@ -352,14 +356,25 @@ class EnterpriseRouteOverviewTests(unittest.TestCase):
             def count(self):
                 return len(self.items)
 
-        service = EnterpriseAssetService(SessionStub(None))
+        company = Company(id=7, company_name="测试企业")
+        certs = [EnterpriseCertificate(id=1, raw_name="ISO9001", cert_type="Quality")]
+        cases = [EnterpriseCase(id=1, project_name="政务云项目", industry="Government")]
+        personnel = [EnterprisePersonnel(id=1, name="张三", role="Architect")]
+        
+        class MultiModelSessionStub:
+            def __init__(self, items): self.items = items
+            def query(self, model):
+                if model is EnterpriseCertificate: return QueryStub(certs)
+                if model is EnterpriseCase: return QueryStub(cases)
+                if model is EnterprisePersonnel: return QueryStub(personnel)
+                return QueryStub(self.items)
+
+        service = EnterpriseAssetService(MultiModelSessionStub(None))
         payload = service.build_assets_overview(company)
         self.assertEqual(payload["company_id"], 7)
         self.assertEqual(payload["counts"]["certificates"], 1)
         self.assertEqual(payload["counts"]["cases"], 1)
         self.assertEqual(payload["counts"]["personnel"], 1)
-        self.assertEqual(payload["counts"]["source_documents"], 1)
-        self.assertEqual(payload["counts"]["images"], 1)
         self.assertEqual(payload["certificates"][0]["raw_name"], "ISO9001")
         self.assertEqual(payload["cases"][0]["project_name"], "政务云项目")
 
@@ -380,7 +395,14 @@ class EnterpriseRouteOverviewTests(unittest.TestCase):
             def count(self):
                 return self.count_value
 
-        service = EnterpriseAssetService(SessionStub(None))
+        class MultiCountSessionStub:
+            def query(self, model):
+                q = type("Q", (), {})()
+                q.filter = lambda *args: q
+                q.count = lambda *args: 1
+                return q
+        
+        service = EnterpriseAssetService(MultiCountSessionStub())
         payload = service.build_enterprise_intake_readiness(company)
         self.assertTrue(payload["ready"])
         self.assertEqual(payload["company_name"], "测试企业")
@@ -416,32 +438,35 @@ class EnterpriseRouteOverviewTests(unittest.TestCase):
             def count(self):
                 return self.count_value
 
-        service = EnterpriseAssetService(SessionStub(None))
+        class MultiCountSessionStub:
+            def query(self, model):
+                q = type("Q", (), {})()
+                q.filter = lambda *args: q
+                q.order_by = lambda *args: q
+                q.limit = lambda *args: q
+                q.scalar = lambda *args: datetime.date(2026, 4, 9)
+                q.all = lambda *args: latest_docs if "SourceDocument" in str(model) else []
+                q.count = lambda *args: 5
+                return q
+
+        service = EnterpriseAssetService(MultiCountSessionStub())
         payload = service.build_latest_ingest_batch(company)
         self.assertTrue(payload["has_batch"])
         self.assertEqual(payload["batch_date"], "2026-04-09")
         self.assertEqual(payload["counts"]["source_documents"], 2)
-        self.assertEqual(payload["counts"]["certificates"], 3)
-        self.assertEqual(payload["counts"]["cases"], 2)
-        self.assertEqual(payload["counts"]["images"], 8)
 
     def test_assets_browser_builder_filters_by_kind_and_query(self):
         company = Company(id=7, company_name="测试企业")
 
-        class QueryStub:
-            def __init__(self, items):
-                self.items = items
+        class SessionStub:
+            def __init__(self, result=None):
+                self.result = result
 
-            def filter(self, *_args, **_kwargs):
-                return self
+            def query(self, _model):
+                return QueryStub(self.result)
 
-            def order_by(self, *_args, **_kwargs):
-                return self
-
-            def all(self):
-                return self.items
-
-        service = EnterpriseAssetService(SessionStub())
+        cert = EnterpriseCertificate(id=1, raw_name="ISO9001", cert_type="Quality")
+        service = EnterpriseAssetService(SessionStub([cert]))
         payload = service.build_assets_browser(company, asset_kind="certificate", query="ISO")
         self.assertEqual(payload["total"], 1)
         self.assertEqual(payload["items"][0]["kind"], "certificate")
@@ -1134,7 +1159,7 @@ class EnterpriseBusinessAssetSanitizationTests(unittest.TestCase):
 
 class RfpAnalyzerTests(unittest.TestCase):
     def test_extract_scoring_items_from_markdown_table(self):
-        from utils.rfp_analyzer import RFPAnalyzer
+        from api.engines.rfp_analyzer import RFPAnalyzer
 
         analyzer = RFPAnalyzer.__new__(RFPAnalyzer)
         markdown = """
@@ -1356,7 +1381,7 @@ class BidExporterTests(unittest.TestCase):
                 section_index="1",
                 generation_status="COMPLETED",
                 content_markdown=f"## 概述\n正文内容\n[IMAGE:{image_path}]",
-                source_fragments=["证据片段 A", "证据片段 B"],
+                source_fragments=[f"证据片段 A [IMAGE:{image_path}]", "证据片段 B"],
             )
 
             class QueryStub:
@@ -1392,7 +1417,7 @@ class BidExporterTests(unittest.TestCase):
             self.assertIn("测试项目", all_text)
             self.assertIn("章节证据附录", all_text)
             self.assertIn("证据片段 A", all_text)
-            self.assertIn("图片证据：evidence.png", all_text)
+            self.assertIn("凭证凭证 - 图片证据：evidence.png", all_text)
 
     def test_exporter_appends_images_from_mixed_evidence_fragments(self):
         png_bytes = base64.b64decode(

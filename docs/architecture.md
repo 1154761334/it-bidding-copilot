@@ -48,9 +48,9 @@ IT Bidding Copilot 当前已经收敛到单一生产基线：
 - 文档解析：`docling_wrapper.py`
 - 企业资质提取：`business_doc_asset_extractor.py`
 - LLM 标准化：`business_asset_llm_extractor.py`
-- RFP 识别：`rfp_analyzer.py`
+- RFP 识别：`api/engines/rfp_analyzer.py`
 - 检索与匹配：`hybrid_retriever.py`、`asset_matcher.py`
-- 偏离与导出辅助：`deviation_engine.py`、`docx_exporter.py`
+- 偏离与导出辅助：`api/engines/deviation_engine.py`、`docx_exporter.py`
 
 当前文档解析栈的后续演进方案见：
 
@@ -100,9 +100,9 @@ project + requirements + enterprise assets
 
 ## Current Verified State
 
-- 历史文档记录显示主链路曾跑通：采购文件识别、`analysis-check`、商务技术文件资质预提、逐章生成、终审、导出
-- 但当前代码重新核验结果显示后端基线已出现回退：`./venv/bin/python -m pytest -q --maxfail=8` -> `8 failed, 8 passed`
-- 当前最明显的回退点位于：
-- `api/services/drafting_review_service.py`
-- `api/services/enterprise_asset_service.py`
-- 因此现阶段更准确的表述是：“主流程骨架已成型，但服务层和测试基线仍需重新收口”
+- 当前本地重新核验结果：
+- `./venv/bin/python -m pytest -q --maxfail=8` -> `54 passed`
+- `cd frontend && npm run build` -> 通过
+- 审标、导出 readiness、企业资产汇总和素材包主契约已恢复到当前前端可用水平
+- Playwright 与真实模型端到端联调仍以历史记录为主，本次未重新执行
+- 因此当前更准确的表述是：“主流程基线已恢复，可继续推进 RFP 确认工作台与主流程产品化收口”

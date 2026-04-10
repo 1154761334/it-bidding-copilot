@@ -23,7 +23,6 @@ from utils.asset_manager import AssetManager
 from utils.asset_classifier import AssetClassifier
 from utils.business_asset_llm_extractor import BusinessAssetLLMExtractor
 from utils.business_doc_asset_extractor import BusinessDocAssetExtractor
-from utils.docling_wrapper import DoclingWrapper
 from utils.hybrid_retriever import HybridRetriever
 
 
@@ -50,7 +49,6 @@ class EnterpriseIngestService:
         self.classifier = AssetClassifier()
         self.retriever = HybridRetriever(db)
         self.asset_manager = AssetManager(db)
-        self.doc_parser = DoclingWrapper()
         self.business_doc_extractor = BusinessDocAssetExtractor()
         self.business_doc_llm_extractor: BusinessAssetLLMExtractor | None = None
 
@@ -155,7 +153,7 @@ class EnterpriseIngestService:
         self.db.refresh(source_doc)
 
         try:
-            ingest_data = await self.classifier.auto_ingest(local_path)
+            ingest_data = await self.classifier.auto_ingest(self.db, source_doc.id)
             asset_type = asset_type_hint or ingest_data["type"]
             parse_data = ingest_data["data"]
             markdown_content = parse_data["markdown"]
@@ -250,7 +248,7 @@ class EnterpriseIngestService:
 
         try:
             # Use improved classifier pipeline
-            ingest_data = await self.classifier.auto_ingest(resolved_path)
+            ingest_data = await self.classifier.auto_ingest(self.db, source_doc.id)
             markdown_content = ingest_data["data"]["markdown"]
             
             # extracted = self.business_doc_extractor.extract(parse_result["markdown"], parse_result["images"])
@@ -388,8 +386,12 @@ class EnterpriseIngestService:
             if img_dir.exists():
                 image_paths = [str(p) for p in img_dir.glob("*.png")]
         else:
-            # Docling/Legacy path
-            image_paths = parse_result.get("images", [])
+            # Docling/Legacy path. `parse_result` is the wrapper payload
+            # {"markdown": ..., "raw": standard_output}, so images may live on the
+            # outer layer or inside the standardized raw payload.
+            image_paths = parse_result.get("images", []) or (
+                raw_parse.get("images", []) if isinstance(raw_parse, dict) else []
+            )
 
         for image_path in image_paths:
             image_name = Path(image_path).name

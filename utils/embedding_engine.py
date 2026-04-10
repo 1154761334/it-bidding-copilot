@@ -1,12 +1,12 @@
 import os
 from typing import List
-from fastembed import TextEmbedding
+from sentence_transformers import SentenceTransformer
 from fastembed.rerank.cross_encoder.text_cross_encoder import TextCrossEncoder
 
 class EmbeddingEngine:
     """
-    Local Embedding and Reranking Engine using FastEmbed.
-    Optimized for CPU inference.
+    Local Embedding and Reranking Engine.
+    Using SentenceTransformer for BAAI/bge-m3 and FastEmbed for reranking.
     """
     _instance = None
 
@@ -16,7 +16,7 @@ class EmbeddingEngine:
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, model_name: str = "intfloat/multilingual-e5-large", rerank_model: str = "BAAI/bge-reranker-base"):
+    def __init__(self, model_name: str = "BAAI/bge-m3", rerank_model: str = "BAAI/bge-reranker-base"):
         if self._initialized:
             return
         
@@ -25,7 +25,8 @@ class EmbeddingEngine:
         os.makedirs(cache_dir, exist_ok=True)
         
         print(f"[EmbeddingEngine] Loading text embedding model: {model_name}...")
-        self.model = TextEmbedding(model_name=model_name, cache_dir=cache_dir)
+        # SentenceTransformer handles model downloads and caching
+        self.model = SentenceTransformer(model_name, cache_folder=cache_dir)
         
         print(f"[EmbeddingEngine] Loading reranker model: {rerank_model}...")
         try:
@@ -43,9 +44,8 @@ class EmbeddingEngine:
         """
         if not text:
             return [0.0] * 1024
-        # list() is needed because embed() returns a generator
-        embeddings = list(self.model.embed([text]))
-        return embeddings[0].tolist()
+        embedding = self.model.encode(text)
+        return embedding.tolist()
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
@@ -53,8 +53,8 @@ class EmbeddingEngine:
         """
         if not texts:
             return []
-        embeddings = list(self.model.embed(texts))
-        return [e.tolist() for e in embeddings]
+        embeddings = self.model.encode(texts)
+        return embeddings.tolist()
 
     def rerank(self, query: str, documents: List[str]) -> List[float]:
         """
