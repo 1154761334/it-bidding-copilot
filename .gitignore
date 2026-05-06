@@ -1,0 +1,24 @@
+# Ignore workspaces and their generated contents
+workspaces/
+
+# Ignore internal company knowledge vault and sensitive data
+vault/
+
+# Ignore Python virtual environments
+.venvs/
+env/
+venv/
+.env
+
+# Ignore cache files
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Ignore logs
+*.log
+
+# Ignore IDE specific files
+.vscode/
+.idea/
+.DS_Store

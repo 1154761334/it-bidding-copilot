@@ -1,0 +1,644 @@
+"""
+ovp-query - 查询知识库并归档回写
+
+基于 Karpathy LLM Wiki 模式：Query → Output → 回写 wiki → 下次 Query 可用
+形成知识复利闭环。
+
+Usage:
+    ovp-query "对比 AI Agent 和 RAG 的架构差异"
+    ovp-query "什么是注意力机制" --save-to "20-Areas/Queries/"
+    ovp-query "2025年AI趋势分析" --output-format slides  # 生成 Marp 幻灯片
+"""
+
+import os
+import re
+import json
+import argparse
+from pathlib import Path
+from datetime import datetime
+from typing import List, Dict
+from dataclasses import dataclass
+from collections import Counter
+
+try:
+    from .discovery import discover_related
+except ImportError:
+    from discovery import discover_related  # type: ignore
+
+try:
+    from .evidence import build_evidence_payload
+except ImportError:
+    from evidence import build_evidence_payload  # type: ignore
+
+try:
+    from .runtime import resolve_vault_dir
+except ImportError:
+    from runtime import resolve_vault_dir  # type: ignore
+
+try:
+    from .packs.loader import DEFAULT_PACK_NAME
+except ImportError:
+    from packs.loader import DEFAULT_PACK_NAME  # type: ignore
+
+try:
+    from .llm_defaults import (
+        DEFAULT_LITELLM_TIMEOUT_SECONDS,
+        DEFAULT_MINIMAX_API_BASE,
+        DEFAULT_MINIMAX_MODEL,
+        normalize_model_for_api_base,
+        resolve_api_base,
+        resolve_api_key,
+    )
+except ImportError:
+    from llm_defaults import (  # type: ignore
+        DEFAULT_LITELLM_TIMEOUT_SECONDS,
+        DEFAULT_MINIMAX_API_BASE,
+        DEFAULT_MINIMAX_MODEL,
+        normalize_model_for_api_base,
+        resolve_api_base,
+        resolve_api_key,
+    )
+
+try:
+    import litellm
+    LITELLM_AVAILABLE = True
+except ImportError:
+    LITELLM_AVAILABLE = False
+
+
+def _load_env_files(vault_dir: Path | None = None):
+    env_paths = []
+    if vault_dir is not None:
+        env_paths.append(vault_dir / ".env")
+    env_paths.append(Path.cwd() / ".env")
+    env_paths.append(Path(__file__).parent.parent.parent / ".env")
+    for env_path in env_paths:
+        if env_path.exists():
+            try:
+                from dotenv import load_dotenv
+                load_dotenv(dotenv_path=env_path, override=True)
+                return env_path
+            except ImportError:
+                pass
+    return None
+
+
+@dataclass
+class SearchResult:
+    """搜索结果"""
+    file: str
+    title: str
+    relevance: float
+    excerpt: str
+
+
+class VaultQuerier:
+    """知识库查询器"""
+
+    def __init__(self, vault_dir: Path, *, pack: str = DEFAULT_PACK_NAME):
+        self.vault_dir = Path(vault_dir)
+        self.pack = pack
+        _load_env_files(self.vault_dir)
+        model_name = os.getenv("AUTO_VAULT_MODEL", DEFAULT_MINIMAX_MODEL)
+        api_type = "openai" if str(model_name).startswith("openai/") else "anthropic"
+        self.api_key = resolve_api_key()
+        self.api_base = resolve_api_base(default=DEFAULT_MINIMAX_API_BASE)
+        self.model = normalize_model_for_api_base(
+            model_name,
+            api_type=api_type,
+            api_base=self.api_base,
+            default_model=DEFAULT_MINIMAX_MODEL,
+        )
+
+        # 关键目录
+        self.evergreen_dir = self.vault_dir / "10-Knowledge" / "Evergreen"
+        self.areas_dir = self.vault_dir / "20-Areas"
+        self.moc_dir = self.vault_dir / "10-Knowledge" / "Atlas"
+
+        # 索引缓存
+        self.all_pages: Dict[str, dict] = {}
+
+    def log(self, message: str):
+        """打印日志"""
+        print(f"[ovp-query] {message}")
+
+    def build_index(self) -> Dict[str, dict]:
+        """构建知识库索引"""
+        self.log("构建知识库索引...")
+
+        # 扫描所有 markdown 文件
+        for pattern in ["10-Knowledge/**/*.md", "20-Areas/**/*.md", "50-Inbox/**/*.md"]:
+            for f in self.vault_dir.glob(pattern):
+                if ".git" in str(f):
+                    continue
+
+                rel_path = str(f.relative_to(self.vault_dir))
+
+                try:
+                    content = f.read_text(encoding='utf-8')
+
+                    # 解析 frontmatter
+                    frontmatter = self._parse_frontmatter(content)
+                    title = frontmatter.get('title', f.stem)
+
+                    # 提取摘要（前 500 字符）
+                    excerpt = self._extract_excerpt(content)
+
+                    self.all_pages[rel_path] = {
+                        'path': rel_path,
+                        'title': title,
+                        'type': frontmatter.get('type', 'unknown'),
+                        'tags': frontmatter.get('tags', []),
+                        'excerpt': excerpt,
+                        'content': content[:2000]  # 保留前 2000 字符用于搜索
+                    }
+                except Exception as e:
+                    self.log(f"警告: 无法索引 {rel_path}: {e}")
+
+        self.log(f"索引完成: {len(self.all_pages)} 个页面")
+        return self.all_pages
+
+    def _parse_frontmatter(self, content: str) -> dict:
+        """解析 YAML frontmatter"""
+        if content.startswith('---'):
+            parts = content.split('---', 2)
+            if len(parts) >= 3:
+                try:
+                    import yaml
+                    return yaml.safe_load(parts[1]) or {}
+                except Exception:
+                    pass
+        return {}
+
+    def _extract_excerpt(self, content: str, max_len: int = 200) -> str:
+        """提取内容摘要"""
+        # 移除 frontmatter
+        if content.startswith('---'):
+            parts = content.split('---', 2)
+            if len(parts) >= 3:
+                content = parts[2]
+
+        # 移除 markdown 标记
+        text = re.sub(r'[#\*\[\]\(\)\|`]', '', content)
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        return text[:max_len] + "..." if len(text) > max_len else text
+
+    def search(self, query: str, top_k: int = 10, engine: str = "knowledge") -> List[SearchResult]:
+        """
+        搜索知识库
+        默认使用 knowledge.db；QMD 仅作为显式引擎
+        """
+        results_by_file: dict[str, SearchResult] = {}
+        for row in discover_related(self.vault_dir, query, engine=engine, limit=top_k, pack=self.pack):
+            path = str(row.get("path") or row.get("slug") or "")
+            title = str(row.get("title") or row.get("slug") or path)
+            excerpt = str(row.get("snippet") or "")
+            results_by_file[path] = SearchResult(
+                file=path,
+                title=title,
+                relevance=float(row.get("score") or 0.0),
+                excerpt=excerpt,
+            )
+
+        for result in self._lexical_search(query, top_k=top_k):
+            existing = results_by_file.get(result.file)
+            if existing is None or result.relevance > existing.relevance:
+                results_by_file[result.file] = result
+
+        merged = sorted(
+            results_by_file.values(),
+            key=lambda item: (-item.relevance, item.file),
+        )
+        return merged[:top_k]
+
+    def _lexical_search(self, query: str, top_k: int = 10) -> List[SearchResult]:
+        keywords = [token for token in re.findall(r"[\w\u4e00-\u9fff]+", query.lower()) if len(token) >= 2]
+        if not keywords:
+            return []
+
+        keyword_counter = Counter(keywords)
+        scored: list[SearchResult] = []
+
+        for path, page in self.all_pages.items():
+            content = f"{page.get('title', '')}\n{page.get('excerpt', '')}\n{page.get('content', '')}".lower()
+            score = 0.0
+            for keyword, weight in keyword_counter.items():
+                hits = content.count(keyword)
+                if not hits:
+                    continue
+                score += float(hits * weight)
+
+            if score <= 0:
+                continue
+
+            # Prefer source notes and deep dives over query archives / MOCs.
+            note_type = str(page.get("type") or "")
+            path_lower = path.lower()
+            if note_type == "query":
+                score *= 0.2
+            elif path_lower.startswith("10-knowledge/atlas/moc-"):
+                score *= 0.1
+            elif path_lower.startswith("50-inbox/03-processed/"):
+                score *= 2.0
+            elif "_深度解读.md" in path:
+                score *= 1.5
+
+            scored.append(
+                SearchResult(
+                    file=path,
+                    title=str(page.get("title") or path),
+                    relevance=score,
+                    excerpt=str(page.get("excerpt") or ""),
+                )
+            )
+
+        scored.sort(key=lambda item: (-item.relevance, item.file))
+        return scored[:top_k]
+
+    def query(self, question: str, search_results: List[SearchResult]) -> dict:
+        """
+        使用 LLM 回答问题
+        返回包含 answer、sources、related_concepts 的字典
+        """
+        if not LITELLM_AVAILABLE:
+            return {
+                'answer': "错误: litellm 未安装，无法使用 LLM 查询",
+                'sources': [],
+                'related_concepts': []
+            }
+
+        # 构建上下文
+        context_parts = []
+        filtered_results = []
+        for result in search_results:
+            page = self.all_pages.get(result.file, {})
+            note_type = str(page.get("type") or "")
+            path_lower = result.file.lower()
+            if note_type == "query":
+                continue
+            if path_lower.startswith("10-knowledge/atlas/moc-"):
+                continue
+            filtered_results.append(result)
+
+        if not filtered_results:
+            filtered_results = search_results
+
+        for r in filtered_results[:5]:  # 取前 5 个结果
+            page = self.all_pages.get(r.file, {})
+            context_parts.append(f"""
+来源: {r.title} ({r.file})
+摘要: {r.excerpt}
+""")
+
+        context = "\n---\n".join(context_parts)
+
+        # 构建 prompt
+        prompt = f"""你是一个专业的知识库助手。基于以下知识库内容回答问题。
+
+知识库内容:
+{context}
+
+用户问题: {question}
+
+请用中文回答，并遵循以下格式:
+
+1. 首先给出**一句话总结**（核心结论）
+2. 然后给出**详细回答**，包含:
+   - 关键概念解释
+   - 对比分析（如果是比较类问题）
+   - 相关技术细节
+3. 列出**参考来源**（使用 [[文件名]] 格式）
+4. 列出**相关概念**（可以链接到 Evergreen 的概念）
+
+回答:"""
+
+        try:
+            response = litellm.completion(
+                model=self.model,
+                api_key=self.api_key,
+                api_base=self.api_base,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=2000,
+                timeout=DEFAULT_LITELLM_TIMEOUT_SECONDS,
+            )
+
+            answer = response.choices[0].message.content
+
+            # 提取相关信息
+            sources = [r.file for r in filtered_results[:5]]
+            related_concepts = self._extract_concepts(answer)
+
+            return {
+                'answer': answer,
+                'sources': sources,
+                'related_concepts': related_concepts
+            }
+
+        except Exception as e:
+            return {
+                'answer': f"查询失败: {e}",
+                'sources': [],
+                'related_concepts': []
+            }
+
+    def _extract_concepts(self, text: str) -> List[str]:
+        """从回答中提取概念"""
+        # 匹配 [[...]] 双向链接
+        concepts = set()
+        for match in re.finditer(r'\[\[([^\]]+)\]\]', text):
+            concepts.add(match.group(1).split('|')[0])
+        return list(concepts)
+
+    def save_to_wiki(
+        self,
+        question: str,
+        result: dict,
+        output_dir: Path,
+        output_format: str = "markdown"
+    ) -> Path:
+        """
+        将查询结果保存到 wiki
+        形成知识复利闭环
+        """
+        # 生成文件名
+        safe_name = re.sub(r'[^\w\s-]', '', question)[:50]
+        safe_name = re.sub(r'\s+', '_', safe_name)
+
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        file_name = f"{safe_name}.md"
+
+        # 确保目录存在
+        target_dir = output_dir / datetime.now().strftime('%Y-%m')
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        target_file = target_dir / file_name
+
+        # 生成内容
+        if output_format == "slides":
+            content = self._generate_marp_slides(question, result)
+        else:
+            content = self._generate_markdown(question, result)
+
+        # 写入文件
+        target_file.write_text(content, encoding='utf-8')
+        self.log(f"已保存到: {target_file}")
+
+        # 更新 MOC-Queries
+        self._update_moc_queries(question, target_file, result)
+
+        return target_file
+
+    def _generate_markdown(self, question: str, result: dict) -> str:
+        """生成 Markdown 格式输出"""
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        sources_links = "\n".join([f"- [[{s.replace('.md', '')}]]" for s in result['sources']])
+        concepts_links = "\n".join([f"- [[{c}]]" for c in result['related_concepts'][:10]])
+
+        return f"""---
+title: "{question}"
+date: {timestamp}
+type: query
+query: "{question}"
+sources: {json.dumps(result['sources'], ensure_ascii=False)}
+---
+
+# {question}
+
+> **一句话总结**: {self._extract_summary(result['answer'])}
+
+## 详细回答
+
+{result['answer']}
+
+## 🔗 参考来源
+
+{sources_links if sources_links else "- (自动生成，请参考原始知识库)"}
+
+## 🌳 相关概念
+
+{concepts_links if concepts_links else "- (未提取到相关概念)"}
+
+---
+
+*此页面由 ovp-query 自动生成于 {timestamp}*
+*遵循知识复利原则：查询 → 回答 → 归档 → 下次可复用*
+"""
+
+    def _extract_summary(self, answer: str) -> str:
+        """从回答中提取一句话总结"""
+        lines = answer.split('\n')
+        for line in lines[:5]:
+            if '总结' in line or '结论' in line:
+                # 清理标记
+                line = re.sub(r'\*\*?|\[|\]', '', line)
+                return line.strip()[:100]
+        return "(详见正文)"
+
+    def _generate_marp_slides(self, question: str, result: dict) -> str:
+        """生成 Marp 幻灯片格式"""
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+
+        # 简化回答到幻灯片
+        slides_content = self._answer_to_slides(result['answer'])
+
+        return f"""---
+marp: true
+theme: default
+title: {question}
+---
+
+# {question}
+
+生成时间: {timestamp}
+
+---
+
+{slides_content}
+
+---
+
+# 参考来源
+
+{chr(10).join([f"- {s}" for s in result['sources']])}
+
+---
+
+*Generated by ovp-query*
+"""
+
+    def _answer_to_slides(self, answer: str) -> str:
+        """将回答转换为幻灯片格式"""
+        # 简单分割成多个 slide
+        paragraphs = [p.strip() for p in answer.split('\n\n') if p.strip()]
+        slides = []
+
+        for i, para in enumerate(paragraphs[:10]):  # 最多 10 页
+            if len(para) > 100:
+                slides.append(f"## 要点 {i+1}\n\n{para[:300]}...")
+            else:
+                slides.append(f"## {para}")
+
+        return "\n\n---\n\n".join(slides)
+
+    def _update_moc_queries(self, question: str, target_file: Path, result: dict):
+        """更新 MOC-Queries.md"""
+        moc_file = self.moc_dir / "MOC-Queries.md"
+
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        # 确保 target_file 是绝对路径或相对于 vault_dir
+        target_file = Path(target_file)
+        if not target_file.is_absolute():
+            target_file = self.vault_dir / target_file
+        rel_path = str(target_file.relative_to(self.vault_dir))
+
+        entry = f"- [[{rel_path.replace('.md', '')}|{question}]] - {timestamp}\n"
+
+        if moc_file.exists():
+            content = moc_file.read_text(encoding='utf-8')
+        else:
+            content = """---
+title: "MOC - 查询归档"
+date: 2026-04-03
+type: moc
+---
+
+# MOC - 查询归档
+
+所有通过 ovp-query 生成的查询结果。
+
+---
+
+## 查询历史
+
+"""
+
+        # 添加到列表
+        content = content + entry
+
+        moc_file.parent.mkdir(parents=True, exist_ok=True)
+        moc_file.write_text(content, encoding='utf-8')
+        self.log(f"已更新 MOC-Queries.md")
+
+
+def main(argv: list[str] | None = None):
+    parser = argparse.ArgumentParser(
+        description="ovp-query: 查询知识库并归档回写 (Karpathy LLM Wiki Pattern)"
+    )
+    parser.add_argument(
+        "question",
+        nargs="?",
+        help="查询问题（例如：对比 AI Agent 和 RAG）"
+    )
+    parser.add_argument(
+        "--vault-dir",
+        type=Path,
+        default=None,
+        help="Vault 目录 (默认: 当前目录)"
+    )
+    parser.add_argument(
+        "--save-to",
+        type=Path,
+        default=None,
+        help="保存到指定目录 (默认: 20-Areas/Queries/)"
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=["markdown", "slides"],
+        default="markdown",
+        help="输出格式: markdown 或 marp slides (默认: markdown)"
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=10,
+        help="搜索返回的相关页面数量 (默认: 10)"
+    )
+    parser.add_argument(
+        "--engine",
+        choices=["knowledge", "qmd"],
+        default="knowledge",
+        help="检索引擎: knowledge(默认) 或 qmd",
+    )
+    parser.add_argument(
+        "--pack",
+        default=DEFAULT_PACK_NAME,
+        help=f"Pack name (default compatibility pack: {DEFAULT_PACK_NAME}; primary pack: research-tech)",
+    )
+
+    args = parser.parse_args(argv)
+
+    vault_dir = resolve_vault_dir(args.vault_dir)
+
+    # 检查是否是 vault 根目录
+    if not (vault_dir / "10-Knowledge").exists() and not (vault_dir / "50-Inbox").exists():
+        print(f"❌ 错误: {vault_dir} 看起来不是 Vault 根目录")
+        return 1
+
+    # 如果没有提供问题，提示输入
+    question = args.question
+    if not question:
+        question = input("请输入查询问题: ").strip()
+
+    if not question:
+        print("❌ 错误: 需要提供查询问题")
+        return 1
+
+    querier = VaultQuerier(vault_dir, pack=args.pack)
+
+    # 构建索引
+    querier.build_index()
+
+    # 搜索
+    querier.log(f"搜索: {question}")
+    try:
+        results = querier.search(question, top_k=args.top_k, engine=args.engine)
+    except RuntimeError as exc:
+        print(f"❌ {exc}")
+        return 1
+
+    if not results:
+        print("❌ 未找到相关内容")
+        return 1
+
+    print(f"\n🔍 找到 {len(results)} 个相关页面:")
+    for i, r in enumerate(results[:5], 1):
+        print(f"  {i}. {r.title} ({r.file})")
+        print(f"     {r.excerpt[:80]}...")
+
+    # 查询
+    querier.log("使用 LLM 生成回答...")
+    answer = querier.query(question, results)
+    answer["evidence"] = build_evidence_payload(
+        vault_dir,
+        query=question,
+        mentions=[result.title for result in results[:3]],
+        slugs=[Path(result.file).stem for result in results[:5] if result.file],
+        limit=min(args.top_k, 5),
+        pack=args.pack,
+    )
+
+    print(f"\n💡 回答:\n")
+    print(answer['answer'])
+
+    # 保存到 wiki
+    save_dir = args.save_to or (vault_dir / "20-Areas" / "Queries")
+
+    querier.log("归档到 wiki...")
+    saved_file = querier.save_to_wiki(
+        question,
+        answer,
+        save_dir,
+        output_format=args.output_format
+    )
+
+    print(f"\n✅ 查询完成！")
+    print(f"   结果已保存: {saved_file}")
+    print(f"   形成知识复利: 下次查询可使用此结果作为输入")
+
+    return 0
+
+
+if __name__ == "__main__":
+    exit(main())
