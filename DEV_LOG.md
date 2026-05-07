@@ -159,3 +159,33 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add page/attachment readiness scoring so review buckets can distinguish evidence exists from final bindery-ready evidence.
+
+## 2026-05-08 Round 7
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `36/36`, project `20`, evidence trace length `70`.
+- Lowest item: evidence existed and was traceable, but `draft.md` and `review.md` did not distinguish "has evidence" from "ready for final attachment binding". Review only reminded users to backfill page numbers without naming which evidence ids still lacked page or asset location.
+
+### Changes
+- Added `asset_paths` to generated `evidence_trace.json` records while keeping source document, heading path, and page hints.
+- Expanded the draft evidence index with `页码/资产提示` and `装订状态` columns.
+- Added attachment readiness analysis to review generation, separating tender references from bidder-side evidence that is ready or still needs page/asset backfill.
+- Added a `## 附件就绪度` section to `review.md`, including bidder evidence readiness counts and per-evidence binding status.
+- Added a medium review finding that names bidder-side evidence ids still missing page or asset location.
+- Updated `/bid` evidence trace details to show asset paths when present.
+- Tightened `eval_bid_assistant.py` from 36 to 40 checks covering trace asset paths, draft attachment readiness, review attachment readiness, and frontend asset-path display.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingDraftTab.tsx src/services/bidding.ts`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `40/40`, project `22`, evidence trace length `70`.
+- Artifact spot check: `review.md` reports `附件就绪度：16/19`, names `EVID-42`, `EVID-38`, and `EVID-74` as needing page or asset backfill, and draft evidence index shows concise asset filenames such as `image268.png`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: make the generated technical方案正文 less generic by expanding high-value technical requirements into evidence-backed implementation paragraphs instead of one-line bullets.

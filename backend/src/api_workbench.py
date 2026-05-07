@@ -405,6 +405,7 @@ def generate_execution(project_id: str, db: Session) -> dict[str, Any]:
                     "source_doc": item["source_doc"],
                     "heading_path": item["heading_path"],
                     "page_hint": item["page_hint"],
+                    "asset_paths": item.get("asset_paths", []),
                 }
             )
 
@@ -535,8 +536,8 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
         "",
         "## 六、证据索引",
         "",
-        "| 证据ID | 标题 | 来源文件 | 来源位置 |",
-        "|---|---|---|---|",
+        "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |",
+        "|---|---|---|---|---|---|",
     ]
     seen: set[str] = set()
     for row in rows:
@@ -544,14 +545,35 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
             if item["evidence_id"] in seen:
                 continue
             seen.add(item["evidence_id"])
+            page_or_asset = _page_or_asset_hint(item)
             lines.append(
-                f"| {_md_cell(item['evidence_id'])} | {_md_cell(item['title'])} | {_md_cell(item['source_doc'])} | {_md_cell(item['heading_path'] or item['page_hint'] or '待回填页码')} |"
+                f"| {_md_cell(item['evidence_id'])} | {_md_cell(item['title'])} | {_md_cell(item['source_doc'])} | {_md_cell(item['heading_path'])} | {_md_cell(page_or_asset or '需回填页码')} | {_md_cell(_binding_status(item))} |"
             )
     return "\n".join(lines) + "\n"
 
 
 def _ids(row: dict[str, Any]) -> str:
     return ", ".join(item["evidence_id"] for item in row["evidence"])
+
+
+def _page_or_asset_hint(item: dict[str, Any]) -> str:
+    if item.get("page_hint"):
+        return str(item["page_hint"])
+    asset_paths = item.get("asset_paths") or []
+    if asset_paths:
+        return ", ".join(Path(str(path)).name for path in asset_paths[:3])
+    return ""
+
+
+def _is_tender_source(source_doc: str) -> bool:
+    return "招标文件" in source_doc or source_doc.startswith("招标")
+
+
+def _binding_status(item: dict[str, Any]) -> str:
+    source_doc = str(item.get("source_doc") or "")
+    if _is_tender_source(source_doc):
+        return "招标依据"
+    return "可定位" if _page_or_asset_hint(item) else "需回填页码"
 
 
 def _split_md_row(line: str) -> list[str]:
@@ -606,12 +628,68 @@ def _review_finding(severity: str, area: str, message: str, suggestion: str, buc
     return {"severity": severity, "area": area, "message": message, "suggestion": suggestion, "bucket": bucket}
 
 
+def _load_evidence_trace(project_id: str) -> list[dict[str, Any]]:
+    try:
+        trace = json.loads(read_artifact_text(project_id, "evidence_trace.json"))
+    except Exception:
+        return []
+    return trace if isinstance(trace, list) else []
+
+
+def _attachment_readiness(trace: list[dict[str, Any]]) -> dict[str, Any]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for item in trace:
+        evidence_id = str(item.get("evidence_id") or "")
+        if not evidence_id:
+            continue
+        record = indexed.setdefault(
+            evidence_id,
+            {
+                "evidence_id": evidence_id,
+                "title": _clean_line(item.get("title") or ""),
+                "source_doc": item.get("source_doc") or "",
+                "heading_path": _clean_line(item.get("heading_path") or ""),
+                "page_hint": item.get("page_hint") or "",
+                "asset_paths": [],
+                "row_ids": set(),
+            },
+        )
+        if item.get("page_hint") and not record["page_hint"]:
+            record["page_hint"] = item["page_hint"]
+        for path in item.get("asset_paths") or []:
+            if path not in record["asset_paths"]:
+                record["asset_paths"].append(path)
+        if item.get("row_id"):
+            record["row_ids"].add(item["row_id"])
+
+    records: list[dict[str, Any]] = []
+    for record in indexed.values():
+        record["row_ids"] = sorted(record["row_ids"])
+        record["page_or_asset"] = _page_or_asset_hint(record)
+        record["status"] = _binding_status(record)
+        records.append(record)
+
+    bidder_records = [item for item in records if item["status"] != "招标依据"]
+    ready_records = [item for item in bidder_records if item["status"] == "可定位"]
+    missing_records = [item for item in bidder_records if item["status"] == "需回填页码"]
+    return {
+        "total": len(records),
+        "bidder_total": len(bidder_records),
+        "ready": len(ready_records),
+        "needs_page_hint": len(missing_records),
+        "tender_references": len(records) - len(bidder_records),
+        "records": sorted(records, key=lambda item: (item["status"] == "需回填页码", item["evidence_id"])),
+        "missing_records": missing_records,
+    }
+
+
 def generate_review(project_id: str) -> dict[str, Any]:
     project = get_project_record(project_id)
     matrix_text = read_artifact_text(project_id, "response_matrix.md")
     if not matrix_text:
         raise HTTPException(status_code=400, detail="Execution artifacts not found")
 
+    attachment_readiness = _attachment_readiness(_load_evidence_trace(project_id))
     data_rows = _matrix_rows_from_markdown(matrix_text)
     missing_rows = [row for row in data_rows if row["status"] == "missing_evidence"]
     hard_rows = [row for row in data_rows if row["type"] == "hard_clause"]
@@ -675,6 +753,17 @@ def generate_review(project_id: str) -> dict[str, Any]:
             "签章与材料风险",
         )
     )
+    if attachment_readiness["needs_page_hint"]:
+        sample = ", ".join(item["evidence_id"] for item in attachment_readiness["missing_records"][:8])
+        findings.append(
+            _review_finding(
+                "medium",
+                "附件就绪度",
+                f"投标人侧证据 {attachment_readiness['ready']}/{attachment_readiness['bidder_total']} 具备页码或资产提示，仍有 {attachment_readiness['needs_page_hint']} 项需回填定位信息：{sample}。",
+                "正式装订前按证据索引补齐页码、截图编号或附件文件名，并复核与响应矩阵条款一致。",
+                "签章与材料风险",
+            )
+        )
 
     risk_buckets = [
         {
@@ -710,6 +799,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
             "covered": sum(1 for row in hard_rows if row["status"] == "covered"),
             "total": len(hard_rows),
         },
+        "attachment_readiness": attachment_readiness,
         "risk_buckets": risk_buckets,
         "findings": findings,
     }
@@ -727,6 +817,7 @@ def _review_markdown(review: dict[str, Any]) -> str:
         "",
         f"- 评分覆盖：{review['score_coverage']['covered']}/{review['score_coverage']['total']}",
         f"- 硬性条款覆盖：{review['hard_clause_coverage']['covered']}/{review['hard_clause_coverage']['total']}",
+        f"- 附件就绪度：{review['attachment_readiness']['ready']}/{review['attachment_readiness']['bidder_total']}",
         "",
         "## 风险分桶",
         "",
@@ -744,6 +835,21 @@ def _review_markdown(review: dict[str, Any]) -> str:
         lines.append("")
 
     lines += [
+        "## 附件就绪度",
+        "",
+        f"- 投标人侧证据：{review['attachment_readiness']['ready']}/{review['attachment_readiness']['bidder_total']} 可定位",
+        f"- 招标依据引用：{review['attachment_readiness']['tender_references']}",
+        "",
+        "| 证据ID | 涉及条款 | 来源文件 | 页码/资产提示 | 装订状态 |",
+        "|---|---|---|---|---|",
+    ]
+    for item in review["attachment_readiness"]["records"]:
+        lines.append(
+            f"| {_md_cell(item['evidence_id'])} | {_md_cell(', '.join(item['row_ids']))} | {_md_cell(item['source_doc'])} | {_md_cell(item['page_or_asset'] or '需回填页码')} | {_md_cell(item['status'])} |"
+        )
+
+    lines += [
+        "",
         "## 质检发现",
     ]
     if review["findings"]:

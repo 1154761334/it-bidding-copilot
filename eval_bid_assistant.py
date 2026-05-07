@@ -139,7 +139,7 @@ def main() -> int:
     tech_rows = [row for row in matrix_rows if row[1] == "technical_requirement"]
     scoring_rows = [row for row in matrix_rows if row[1] == "scoring_item"]
     checks.append(check("matrix table is well formed", not malformed_table_rows(matrix, 6), str(malformed_table_rows(matrix, 6)[:1])))
-    checks.append(check("draft tables are well formed", not malformed_table_rows(draft, {4, 5}), str(malformed_table_rows(draft, {4, 5})[:1])))
+    checks.append(check("draft tables are well formed", not malformed_table_rows(draft, {4, 5, 6}), str(malformed_table_rows(draft, {4, 5, 6})[:1])))
     checks.append(check("matrix covers hard clauses", len(hard_rows) >= 5, str(len(hard_rows))))
     checks.append(check("matrix covers technical requirements", len(tech_rows) >= 8, str(len(tech_rows))))
     checks.append(check("matrix covers scoring items", len(scoring_rows) >= 5, str(len(scoring_rows))))
@@ -157,13 +157,16 @@ def main() -> int:
             str([item for item in trace if not item.get("source_doc") or not item.get("heading_path")][:1]),
         )
     )
+    checks.append(check("trace records include asset paths", all("asset_paths" in item for item in trace)))
 
     checks.append(check("draft has realistic structure", all(token in draft for token in ["商务响应", "技术方案", "售后服务方案"])))
-    checks.append(check("draft has evidence index", "## 六、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 |" in draft))
+    checks.append(check("draft has evidence index", "## 六、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |" in draft))
+    checks.append(check("draft evidence index tracks attachment readiness", all(token in draft for token in ["页码/资产提示", "装订状态", "需回填页码"])))
     checks.append(check("draft avoids page placeholders", "第 **X** 页" not in draft and "第X页" not in draft))
     checks.append(check("draft avoids unsupported provided claims", "待补充对应证明材料，正式稿不得写成已提供" not in draft))
     checks.append(check("review flags coverage", "评分覆盖" in review and "硬性条款覆盖" in review))
     checks.append(check("review flags missing form risks", "签章与主体信息" in review and "材料索引" in review))
+    checks.append(check("review has attachment readiness", all(token in review for token in ["## 附件就绪度", "投标人侧证据", "装订状态"])))
     checks.append(
         check(
             "review has actionable risk buckets",
@@ -215,6 +218,7 @@ def main() -> int:
             all(token in frontend_draft_tab for token in ["EvidenceTracePanel", "groupEvidenceTrace", "onSelectEvidence", "Page / Asset hint"]),
         )
     )
+    checks.append(check("frontend evidence panel shows asset paths", all(token in frontend_draft_tab for token in ["asset_paths", "Asset paths"])))
     checks.append(check("frontend review tab shows risk buckets", all(token in frontend_review_tab for token in ["risk_buckets", "Risk Buckets", "bucket.status"])))
 
     passed = sum(1 for item in checks if item["ok"])
