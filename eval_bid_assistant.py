@@ -437,6 +437,7 @@ def main() -> int:
     frontend_bid_route_runbook = read_repo_text("frontend/scripts/bidding/README.md")
     frontend_bid_route_secret_check = read_repo_text("frontend/scripts/bidding/checkBidRouteSmokeSecrets.mts")
     frontend_bid_route_secret_test = read_repo_text("frontend/scripts/bidding/testBidRouteSmokeSecrets.mts")
+    frontend_bid_route_acceptance_runner = read_repo_text("frontend/scripts/bidding/runBidSmokeAcceptance.mts")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
@@ -701,6 +702,34 @@ def main() -> int:
                     "non-secret static guard",
                     "runtime fixture self-test",
                     "real `/bid` route smoke",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route smoke local runner is standardized",
+            all(
+                token in frontend_bid_route_acceptance_runner
+                for token in [
+                    "BID_BACKEND_DIR",
+                    "BID_ACCEPTANCE_READY_TIMEOUT_MS",
+                    "BID_ACCEPTANCE_VERBOSE",
+                    "waitForJsonHealth",
+                    "waitForFrontend",
+                    "terminateProcess",
+                    "process.kill(-child.pid",
+                    "acceptance:bid-smoke",
+                    "BID_SMOKE_ACCEPTANCE_LOCAL_PASS",
+                ]
+            )
+            and "acceptance:bid-smoke:local" in frontend_package_json
+            and all(
+                token in frontend_bid_route_runbook
+                for token in [
+                    "pnpm run acceptance:bid-smoke:local",
+                    "starts temporary FastAPI and Vite",
+                    "tears them down",
                 ]
             ),
         )
