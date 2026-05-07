@@ -921,6 +921,29 @@ def main() -> int:
     )
     checks.append(
         check(
+            "frontend bid smoke preflight summary exposes terminal artifact",
+            all(
+                token in frontend_bid_route_preflight_summary_test
+                for token in [
+                    "TERMINAL_ARTIFACT_ID",
+                    "TERMINAL_ARTIFACT_SOURCE",
+                    "TERMINAL_COMMAND_MARKER",
+                    "terminalArtifacts.length === 1",
+                    "Summary terminal artifact id drifted.",
+                    "Summary terminal artifact source drifted.",
+                    "Summary terminal artifact command drifted.",
+                    "terminal_artifact",
+                    "command: terminalArtifact.command",
+                    "id: terminalArtifact.id",
+                    "source: terminalArtifact.source",
+                ]
+            )
+            and "exposes terminal artifact id/source/command separately for the port preflight guard"
+            in frontend_bid_route_runbook,
+        )
+    )
+    checks.append(
+        check(
             "frontend bid smoke preflight summary has failure fixture",
             all(
                 token in frontend_bid_route_preflight_summary_failure_test

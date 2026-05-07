@@ -1531,3 +1531,47 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: make the preflight summary JSON expose terminal artifact id/source/command separately so CI consumers can verify the terminal port guard without parsing the full sub-artifact list.
+
+## 2026-05-08 Round 49
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `113/113`, project `201`, evidence trace length `94`.
+- Lowest item: the preflight summary emitted the full sub-artifact list and terminal status, but CI consumers still had to parse the full artifact list to verify which terminal port guard produced `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+
+### Changes
+- Added terminal artifact constants to `frontend/scripts/bidding/testBidSmokePreflightSummary.mts` for the expected terminal artifact id, source script, and port preflight command marker.
+- Tightened the summary guard to require exactly one artifact with `manifest.expected_terminal_status`, require its id to be `preflight_port_guard`, require its source to be `scripts/bidding/runBidSmokeAcceptance.mts`, and require its command to include `BID_ACCEPTANCE_PREFLIGHT_ONLY=1`.
+- Added a top-level `terminal_artifact` object to the preflight summary JSON with id, source, command, and status.
+- Updated the bid smoke runbook to document that the preflight summary exposes terminal artifact id/source/command separately for the port preflight guard.
+- Tightened `eval_bid_assistant.py` from 113 to 114 checks by requiring the terminal artifact summary fields, guard assertions, and runbook wording.
+
+### Verification
+- `cd backend && venv/bin/python -m py_compile ../eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec prettier --write scripts/bidding/README.md scripts/bidding/testBidSmokePreflightSummary.mts`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary`: PASS, emitted `terminal_artifact` with `preflight_port_guard`, `scripts/bidding/runBidSmokeAcceptance.mts`, and `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary-failure`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `114/114`, project `202`, evidence trace length `94`.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS.
+- `cd frontend && pnpm exec eslint ...`: PASS for the bid smoke scripts touched and referenced in this round.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted top-level `terminal_artifact` before `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints warning-level output, but exits 0.
+- `cd frontend && pnpm exec prettier --check ...`: PASS for package/runbook/manifest and touched bid smoke scripts.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_SMOKE_PREFLIGHT_SUMMARY_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`.
+- `pgrep -af '[u]vicorn|[v]ite|[n]ext' || true`: PASS, no matching processes remained after local acceptance.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- Final `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `114/114`, project `205`, evidence trace length `94`.
+
+### Artifacts
+- `pnpm run test:bid-smoke-preflight-summary` now emits a top-level `terminal_artifact` object for CI consumers.
+- `acceptance:bid-smoke:preflight` now includes direct terminal port-guard id/source/command/status metadata in its summary output.
+- The summary guard now independently verifies the terminal port guard identity before local or production smoke steps run.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a service-free negative fixture for the preflight summary terminal artifact so id/source/command drift fails with targeted diagnostics before the preflight order guard runs.
