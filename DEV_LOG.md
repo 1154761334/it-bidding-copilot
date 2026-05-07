@@ -1356,3 +1356,46 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a service-free negative fixture for the preflight summary script so missing runbook statuses or missing preflight commands fail before local smoke.
+
+## 2026-05-08 Round 45
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `109/109`, project `177`, evidence trace length `94`.
+- Lowest item: the preflight summary had a positive CI artifact, but no service-free negative fixture proved missing runbook statuses or missing preflight commands fail before local smoke.
+
+### Changes
+- Added path override support to `frontend/scripts/bidding/testBidSmokePreflightSummary.mts` for temporary manifest, package, and runbook fixtures.
+- Added `frontend/scripts/bidding/testBidSmokePreflightSummaryFailure.mts`, which proves the summary guard passes under path overrides, then fails on missing runbook status coverage and missing preflight command wiring without emitting the summary pass status.
+- Tightened the preflight summary command check from substring matching to exact preflight-step matching so prefix-like command drift cannot pass accidentally.
+- Added `test:bid-smoke-preflight-summary-failure` to `frontend/package.json` and wired it into both `acceptance:bid-smoke` and `acceptance:bid-smoke:preflight`.
+- Updated the bid smoke runbook, command matrix, acceptance manifest, and secret guard scan surface to include `BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS`.
+- Hardened `/bid` route smoke clicks after local acceptance exposed Playwright stability waits on visible/enabled buttons.
+- Tightened `eval_bid_assistant.py` from 109 to 110 checks by requiring the summary failure fixture, env override coverage, package/runbook/manifest wiring, exact preflight command checks, and secret guard coverage.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary-failure`: PASS, emitted `BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS` for runbook status and preflight command cases.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary`: PASS, emitted `BID_SMOKE_PREFLIGHT_SUMMARY_TEST_PASS` with 12 sub-artifacts and terminal status `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS` with 12 recorded statuses.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS, now includes `test:bid-smoke-preflight-summary-failure` in documented/package command coverage.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, scans the preflight summary failure fixture and route smoke script.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS` before `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm exec eslint ...`: PASS for the bid smoke scripts touched in this round.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `110/110`, project `183`, evidence trace length `94`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream warning-level output, but exits 0.
+- `cd frontend && pnpm exec prettier --check ...`: PASS for package/runbook/manifest and touched bid smoke scripts.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS after the route smoke click hardening, emitted `BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `pnpm run test:bid-smoke-preflight-summary-failure` now provides a service-free negative artifact for the preflight summary contract.
+- `scripts/bidding/bidSmokeAcceptanceManifest.json` now records 12 preflight sub-artifact statuses including the preflight summary failure fixture.
+- `acceptance:bid-smoke:preflight` now proves runbook-status and preflight-command drift handling before final port readiness.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a service-free negative fixture for exact preflight command ordering so newly added summary/manifest guards cannot drift behind service-starting smoke steps.
