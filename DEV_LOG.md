@@ -717,3 +717,35 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: standardize a local authenticated production-route `/spa/.../bid` bootstrap so the existing route smoke can be promoted from direct SPA coverage to full Next/auth coverage without committing local secrets.
+
+## 2026-05-08 Round 27
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `91/91`, project `94`, evidence trace length `94`.
+- Lowest item: the `/bid` smoke covered the unauthenticated Vite SPA route, but running it against the production `/spa/.../bid` path still lacked a standard local-auth bootstrap contract. The script could fail on auth redirects without telling operators which safe env names or stored browser state were needed.
+
+### Changes
+- Extended `frontend/scripts/bidding/smokeBidRoute.mts` with optional `BID_ROUTE_STORAGE_STATE` support so an authenticated Playwright storage state can be reused for production-route smoke runs.
+- Added auth-redirect detection for `/signin` and `/signup`, returning a structured `BID_ROUTE_AUTH_REQUIRED` diagnostic when `BID_ROUTE_ALLOW_AUTH_REQUIRED=1`.
+- The diagnostic lists required environment variable names only, not values, and leaves the default unauthenticated Vite `/bid` smoke path unchanged.
+- Tightened `eval_bid_assistant.py` from 91 to 92 checks by requiring the route smoke auth-bootstrap diagnostic support.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `92/92`, project `97`, evidence trace length `94`.
+- `cd frontend && pnpm exec eslint scripts/bidding/smokeBidRoute.mts`: PASS.
+- `cd frontend && pnpm exec tsx scripts/bidding/smokeBidRoute.mts`: PASS against `http://127.0.0.1:9876/bid`, API status `ok`, evidence count `253`, auth mode `not_required`; temporary FastAPI and SPA dev servers were stopped after the smoke.
+- `git diff --check && git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Artifacts
+- The route smoke now emits `BID_ROUTE_SMOKE_PASS` with an `auth` field for normal `/bid` runs.
+- When pointed at an auth-protected production route without storage state, the same script can emit `BID_ROUTE_AUTH_REQUIRED` with only bootstrap env var names, keeping local secrets out of logs and commits.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a documented helper for creating the Playwright storage state from an already-running local production instance, so the production-route smoke can be run repeatably without embedding credentials in the repo.

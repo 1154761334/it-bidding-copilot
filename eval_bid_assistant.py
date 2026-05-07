@@ -568,6 +568,22 @@ def main() -> int:
     )
     checks.append(
         check(
+            "frontend /bid route smoke supports auth bootstrap diagnostic",
+            all(
+                token in frontend_bid_route_smoke
+                for token in [
+                    "BID_ROUTE_STORAGE_STATE",
+                    "BID_ROUTE_ALLOW_AUTH_REQUIRED",
+                    "BID_ROUTE_AUTH_REQUIRED",
+                    "required_env_names",
+                    "storageState",
+                    "/signin",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
             "frontend evidence tab has material group presets",
             all(
                 token in frontend_evidence_tab
