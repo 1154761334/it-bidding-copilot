@@ -104,3 +104,30 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add artifact evidence trace drill-down from highlighted `EVID-*` references to source document, heading path, and asset hints.
+
+## 2026-05-08 Round 5
+
+### Baseline
+- Lowest item: evidence trace usability in `/bid`. Round 4 highlighted `EVID-*` references, but reviewers still had to open `evidence_trace.json` manually to see source document, heading path, row id, and page/asset hint.
+- The evaluator did not cover whether the frontend actually loaded trace metadata for displayed artifact evidence ids.
+
+### Changes
+- Added an `EvidenceTraceRecord` frontend type matching generated `evidence_trace.json`.
+- Lazily loaded `evidence_trace.json` when opening non-JSON artifacts, cached the parsed trace in the bidding store, and reset trace state when switching projects.
+- Made traced `EVID-*` badges clickable in Markdown artifact previews.
+- Added an evidence trace panel showing row id, cleaned title, source document, heading path, and page/asset hint for the selected evidence id.
+- Tightened `eval_bid_assistant.py` with checks for trace loading and clickable evidence-detail rendering.
+
+### Verification
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingDraftTab.tsx src/store/bidding/index.ts src/features/Bidding/BiddingWorkbench.tsx src/services/bidding.ts`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `34/34`, project `16`, evidence trace length `70`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: improve generated `review.md` severity model so high-risk commercial terms, missing主体信息, and scoring-risk evidence are separated into explicit actionable buckets.

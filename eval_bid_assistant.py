@@ -196,6 +196,18 @@ def main() -> int:
             all(token in frontend_draft_tab for token in ["ArtifactPreview", "MarkdownTable", "splitMarkdownRow"]),
         )
     )
+    checks.append(
+        check(
+            "frontend loads artifact evidence trace",
+            all(token in frontend_store for token in ["currentEvidenceTrace", "parseEvidenceTrace", "getArtifact(projectId, 'evidence_trace.json')"]),
+        )
+    )
+    checks.append(
+        check(
+            "frontend evidence ids open trace details",
+            all(token in frontend_draft_tab for token in ["EvidenceTracePanel", "groupEvidenceTrace", "onSelectEvidence", "Page / Asset hint"]),
+        )
+    )
 
     passed = sum(1 for item in checks if item["ok"])
     total = len(checks)
