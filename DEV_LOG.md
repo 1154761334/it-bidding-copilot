@@ -1195,3 +1195,42 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a CI-safe runbook fixture for production docs guard path overrides so capture/smoke/gitignore drift can be tested without touching the real repo files.
+
+## 2026-05-08 Round 41
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `105/105`, project `161`, evidence trace length `94`.
+- Lowest item: the production docs guard had path overrides, but only the README override was exercised; capture script, smoke script, and gitignore drift still lacked CI-safe fixture coverage.
+
+### Changes
+- Added `frontend/scripts/bidding/testBidRouteProductionDocsDrift.mts`, which copies the runbook, capture script, smoke script, and gitignore into a temporary directory, proves the path override fixture passes, then verifies drift failures for missing `.auth/`, changed capture default storage path, and changed smoke storage-state auth marker.
+- Added `test:bid-route-production-docs-drift` to `frontend/package.json` and wired it into both `acceptance:bid-smoke` and `acceptance:bid-smoke:preflight`.
+- Updated the bid smoke runbook and command matrix to advertise `BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS`.
+- Expanded the bid smoke secret guard scan surface to include the drift fixture.
+- Tightened `eval_bid_assistant.py` from 105 to 106 checks by requiring the drift fixture, package/runbook wiring, path override environment names, and secret guard coverage.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run test:bid-route-production-docs-drift`: PASS, emitted `BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS` for `gitignore`, `capture_path`, and `smoke_auth` drift cases.
+- `cd frontend && pnpm run test:bid-route-production-docs`: PASS, emitted `BID_ROUTE_PRODUCTION_DOCS_TEST_PASS`.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS, now includes `test:bid-route-production-docs-drift` in documented/package command coverage.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, scans the production docs drift fixture.
+- `cd frontend && pnpm exec eslint scripts/bidding/testBidRouteProductionDocsDrift.mts scripts/bidding/testBidRouteProductionDocs.mts scripts/bidding/testBidRouteProductionDocsFailure.mts scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidSmokeCommandMatrix.mts scripts/bidding/runBidSmokeAcceptance.mts scripts/bidding/testBidSmokeAcceptanceRunner.mts scripts/bidding/testBidRouteSmokeSecrets.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `106/106`, project `162`, evidence trace length `94`.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS` and `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/README.md scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidRouteProductionDocs.mts scripts/bidding/testBidRouteProductionDocsFailure.mts scripts/bidding/testBidRouteProductionDocsDrift.mts scripts/bidding/testBidSmokeCommandMatrix.mts`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `pnpm run test:bid-route-production-docs-drift` now provides a CI-safe path override drift artifact for production route docs hygiene.
+- `acceptance:bid-smoke:preflight` now covers positive production docs, negative secret assignment, and gitignore/capture/smoke drift paths without touching real repo files or starting services.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a compact acceptance manifest that records the bid smoke preflight sub-artifacts and expected status names so CI logs can be audited without reading the full runbook.

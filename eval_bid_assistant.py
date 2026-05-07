@@ -441,6 +441,7 @@ def main() -> int:
     frontend_bid_route_acceptance_runner_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceRunner.mts")
     frontend_bid_route_command_matrix_test = read_repo_text("frontend/scripts/bidding/testBidSmokeCommandMatrix.mts")
     frontend_bid_route_production_docs_test = read_repo_text("frontend/scripts/bidding/testBidRouteProductionDocs.mts")
+    frontend_bid_route_production_docs_drift_test = read_repo_text("frontend/scripts/bidding/testBidRouteProductionDocsDrift.mts")
     frontend_bid_route_production_docs_failure_test = read_repo_text("frontend/scripts/bidding/testBidRouteProductionDocsFailure.mts")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
@@ -656,6 +657,7 @@ def main() -> int:
                     "BID_ROUTE_SMOKE_SECRET_CHECK_FAIL",
                     "credential literal",
                     "runBidSmokeAcceptance.mts",
+                    "testBidRouteProductionDocsDrift.mts",
                     "testBidRouteProductionDocs.mts",
                     "testBidRouteProductionDocsFailure.mts",
                     "testBidSmokeAcceptanceRunner.mts",
@@ -700,7 +702,7 @@ def main() -> int:
                 token in frontend_package_json
                 for token in [
                     "acceptance:bid-smoke",
-                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-route-production-docs && pnpm run test:bid-route-production-docs-failure && pnpm run smoke:bid-route",
+                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-route-production-docs && pnpm run test:bid-route-production-docs-failure && pnpm run test:bid-route-production-docs-drift && pnpm run smoke:bid-route",
                 ]
             )
             and all(
@@ -714,6 +716,7 @@ def main() -> int:
                     "command matrix self-test",
                     "production-route docs/storage-state guard",
                     "runtime failure fixture",
+                    "path override drift fixture",
                     "real `/bid` route smoke",
                 ]
             ),
@@ -897,6 +900,30 @@ def main() -> int:
             and "pnpm run test:bid-route-production-docs-failure" in frontend_bid_route_runbook
             and "BID_ROUTE_PRODUCTION_DOCS_FAILURE_TEST_PASS" in frontend_bid_route_runbook
             and "testBidRouteProductionDocsFailure.mts" in frontend_bid_route_secret_check,
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route production docs guard has path override drift fixture",
+            all(
+                token in frontend_bid_route_production_docs_drift_test
+                for token in [
+                    "SOURCE_PATHS",
+                    "BID_ROUTE_PRODUCTION_DOCS_CAPTURE_SCRIPT",
+                    "BID_ROUTE_PRODUCTION_DOCS_GITIGNORE",
+                    "BID_ROUTE_PRODUCTION_DOCS_README",
+                    "BID_ROUTE_PRODUCTION_DOCS_SMOKE_SCRIPT",
+                    "BID_ROUTE_PRODUCTION_DOCS_TEST_PASS",
+                    "capture script default storage-state path is missing",
+                    "smoke script storage-state auth artifact is missing",
+                    "BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS",
+                    "runtime-path-overrides",
+                ]
+            )
+            and "test:bid-route-production-docs-drift" in frontend_package_json
+            and "pnpm run test:bid-route-production-docs-drift" in frontend_bid_route_runbook
+            and "BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS" in frontend_bid_route_runbook
+            and "testBidRouteProductionDocsDrift.mts" in frontend_bid_route_secret_check,
         )
     )
     checks.append(
