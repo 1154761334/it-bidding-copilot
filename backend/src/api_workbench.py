@@ -1030,10 +1030,22 @@ def _review_finding(severity: str, area: str, message: str, suggestion: str, buc
     return {"severity": severity, "area": area, "message": message, "suggestion": suggestion, "bucket": bucket}
 
 
-def _review_action(priority: str, area: str, action: str, owner: str, references: list[str]) -> dict[str, Any]:
+def _is_artifact_ref(ref: Any) -> bool:
+    return bool(re.fullmatch(r"[\w.-]+\.(?:md|json)(?:#[^\s|]+)?", str(ref)))
+
+
+def _review_action(
+    priority: str,
+    area: str,
+    action: str,
+    owner: str,
+    references: list[str],
+    artifact_refs: list[str] | None = None,
+) -> dict[str, Any]:
+    references = _unique(references + (artifact_refs or []))
     evidence_ids = [ref for ref in references if re.fullmatch(r"EVID-\d+", str(ref))]
     row_ids = [ref for ref in references if re.fullmatch(r"[HTSC]\d+", str(ref))]
-    artifact_refs = [ref for ref in references if str(ref).endswith(".md")]
+    artifact_refs = [ref for ref in references if _is_artifact_ref(ref)]
     return {
         "priority": priority,
         "area": area,
@@ -1493,6 +1505,7 @@ def _action_checklist(
                 "补齐未覆盖硬性条款的真实证明材料，或在正式稿中改为待补充，不得宣称已满足。",
                 "投标负责人",
                 [row["id"] for row in missing_hard],
+                ["response_matrix.md", "review.md#风险分桶", "handoff.md#证据缺口"],
             )
         )
 
@@ -1504,6 +1517,7 @@ def _action_checklist(
                 "回填投标人全称，并同步封面、授权书、偏离表和签章页。",
                 "商务负责人",
                 ["投标人待填写"],
+                ["draft.md#一、商务响应及偏离表", "review.md#风险分桶", "handoff.md#剩余人工动作"],
             )
         )
 
@@ -1515,6 +1529,7 @@ def _action_checklist(
                 "复核报价、付款、履约保证金、发票类型和投标有效期口径，完成商务签核。",
                 "商务负责人",
                 [row["id"] for row in commercial_rows[:8]],
+                ["draft.md#二、报价及合同商务响应", "response_matrix.md", "review.md#商务证据签核"],
             )
         )
 
@@ -1533,6 +1548,7 @@ def _action_checklist(
                 f"处理 {len(commercial_gaps)} 条报价/付款/保证金/发票响应的投标人侧证据签核缺口。",
                 "商务负责人",
                 _unique(row_ids + evidence_ids),
+                ["review.md#商务证据签核", "handoff.md#证据缺口", "draft.md#七、证据索引"],
             )
         )
 
@@ -1551,6 +1567,7 @@ def _action_checklist(
                 f"处理 {len(contract_gaps)} 项服务期、验收、违约、分包/转让等合同履约义务证据缺口。",
                 "项目经理/法务",
                 _unique(row_ids + evidence_ids),
+                ["draft.md#八、合同履约响应附录", "review.md#合同履约义务复核", "handoff.md#证据缺口"],
             )
         )
 
@@ -1563,6 +1580,7 @@ def _action_checklist(
                 f"回填 {attachment_readiness['needs_page_hint']} 项投标人侧证据的页码、截图编号或附件文件名。",
                 "装订负责人",
                 references,
+                ["draft.md#七、证据索引", "review.md#附件就绪度", "handoff.md#证据缺口"],
             )
         )
 
@@ -1580,6 +1598,7 @@ def _action_checklist(
                 f"处理 {len(scoring_readiness['not_ready_rows'])} 个未就绪评分项，补齐投标人证明或页码/附件编号。",
                 "技术/商务负责人",
                 row_ids + evidence_ids,
+                ["draft.md#四、技术方案", "review.md#评分就绪度", "response_matrix.md"],
             )
         )
 
@@ -1590,6 +1609,7 @@ def _action_checklist(
             "装订前复核签章状态、原件/复印件一致性、附件目录和证据索引交叉引用。",
             "项目经理",
             ["review.md", "draft.md"],
+            ["handoff.md#Artifact-Map", "evidence_trace.json"],
         )
     )
     return actions

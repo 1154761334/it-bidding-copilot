@@ -147,6 +147,19 @@ def main() -> int:
             str(action_checklist),
         )
     )
+    artifact_required_areas = {"主体信息", "商务复核", "商务证据回填", "合同义务签核", "附件定位", "评分定位"}
+    checks.append(
+        check(
+            "project action checklist maps artifact refs",
+            bool(action_checklist)
+            and all(
+                item.get("artifact_refs") and any(".md" in ref or ".json" in ref for ref in item.get("artifact_refs", []))
+                for item in action_checklist
+                if item.get("area") in artifact_required_areas
+            ),
+            str(action_checklist),
+        )
+    )
     material_groups = review_payload.get("material_groups") or []
     checks.append(
         check(
@@ -366,6 +379,20 @@ def main() -> int:
         check(
             "review has action evidence index",
             all(token in review for token in ["## 操作证据定位", "关联行", "证据ID", "Artifact"]),
+        )
+    )
+    checks.append(
+        check(
+            "review action index maps artifact refs",
+            all(
+                token in review
+                for token in [
+                    "draft.md#二、报价及合同商务响应",
+                    "review.md#合同履约义务复核",
+                    "review.md#附件就绪度",
+                    "response_matrix.md",
+                ]
+            ),
         )
     )
     checks.append(check("review has material group review", all(token in review for token in ["## 材料包复核", "资格证明材料", "商务报价材料", "技术评分附件"])))

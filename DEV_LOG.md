@@ -687,3 +687,33 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add an authenticated production-route `/spa/.../bid` e2e smoke once the LobeChat auth/database bootstrap is standardized for local trial runs; current smoke covers the SPA route and real Bidding-agent integration directly.
+
+## 2026-05-08 Round 26
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `89/89`, project `90`, evidence trace length `94`.
+- Lowest item: the structured review `action_checklist` exposed evidence ids and row ids, but most non-final action items still had empty `artifact_refs`. Operators could see what to fix, but had to infer whether the work belonged in `draft.md`, `review.md`, `handoff.md`, or `response_matrix.md`.
+
+### Changes
+- Extended `_review_action` to accept explicit artifact references and recognize Markdown anchors plus JSON artifacts as structured `artifact_refs`.
+- Added artifact mappings for subject-info, commercial review, commercial evidence backfill, contract-obligation signoff, attachment positioning, scoring positioning, disqualification-risk, and final-review actions.
+- Kept evidence ids and row ids derived only from existing references, while adding artifact refs to both API payloads and generated `review.md` / `handoff.md` action tables.
+- Tightened `eval_bid_assistant.py` from 89 to 91 checks by requiring action checklist artifact refs in the project payload and visible artifact refs in the review action index.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `91/91`, project `92`, evidence trace length `94`.
+- `git diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Artifacts
+- Project `92` `review.md` now maps `商务复核` to `draft.md#二、报价及合同商务响应`, `合同义务签核` to `draft.md#八、合同履约响应附录` and `review.md#合同履约义务复核`, `附件定位` to `review.md#附件就绪度`, and `评分定位` to `response_matrix.md`.
+- Project `92` `handoff.md` carries the same artifact refs in the remaining-actions table, including `evidence_trace.json` for final cross-reference review.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: standardize a local authenticated production-route `/spa/.../bid` bootstrap so the existing route smoke can be promoted from direct SPA coverage to full Next/auth coverage without committing local secrets.
