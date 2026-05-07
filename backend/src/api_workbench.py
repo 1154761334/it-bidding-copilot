@@ -128,6 +128,39 @@ def get_project_record(project_id: str) -> dict[str, Any]:
     return project
 
 
+def _project_readiness_summary(project: dict[str, Any]) -> dict[str, Any] | None:
+    review = project.get("review") or {}
+    attachment = review.get("attachment_readiness") or {}
+    scoring = review.get("scoring_readiness") or {}
+    if not attachment and not scoring:
+        return None
+
+    attachment_gap = int(attachment.get("needs_page_hint") or 0)
+    scoring_gap = (
+        int(scoring.get("needs_page_hint") or 0)
+        + int(scoring.get("needs_bidder_evidence") or 0)
+        + int(scoring.get("missing_evidence") or 0)
+    )
+    blocking_statuses = {"blocked", "needs_completion", "needs_index"}
+    risk_statuses = {
+        bucket.get("name", ""): bucket.get("status", "")
+        for bucket in review.get("risk_buckets", [])
+    }
+    needs_attention = attachment_gap or scoring_gap or any(status in blocking_statuses for status in risk_statuses.values())
+
+    return {
+        "status": "needs_attention" if needs_attention else "ready",
+        "attachment_ready": attachment.get("ready", 0),
+        "attachment_total": attachment.get("bidder_total", 0),
+        "attachment_needs_page_hint": attachment_gap,
+        "scoring_ready": scoring.get("ready", 0),
+        "scoring_total": scoring.get("total", 0),
+        "scoring_needs_page_hint": scoring.get("needs_page_hint", 0),
+        "scoring_needs_bidder_evidence": scoring.get("needs_bidder_evidence", 0),
+        "risk_statuses": risk_statuses,
+    }
+
+
 def public_project(project: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(project["id"]),
@@ -137,6 +170,7 @@ def public_project(project: dict[str, Any]) -> dict[str, Any]:
         "progress": project.get("progress", 0),
         "created_at": project.get("created_at", ""),
         "updated_at": project.get("updated_at", ""),
+        "readiness_summary": _project_readiness_summary(project),
     }
 
 

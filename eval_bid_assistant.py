@@ -110,6 +110,22 @@ def main() -> int:
     detail = client.get(f"/projects/{project_id}") if project_id else None
     detail_json = detail.json() if detail is not None and detail.status_code == 200 else {}
     checks.append(check("project detail available", bool(detail_json.get("id"))))
+    readiness_summary = detail_json.get("readiness_summary") or {}
+    checks.append(
+        check(
+            "project exposes readiness summary",
+            all(
+                key in readiness_summary
+                for key in [
+                    "attachment_ready",
+                    "attachment_needs_page_hint",
+                    "scoring_ready",
+                    "scoring_needs_bidder_evidence",
+                ]
+            ),
+            str(readiness_summary),
+        )
+    )
 
     artifacts = set(demo_json.get("artifacts", []))
     required_artifacts = {"plan.md", "response_matrix.md", "draft.md", "review.md", "evidence_trace.json"}
@@ -196,6 +212,20 @@ def main() -> int:
                 ]
             )
             and "setActiveTab('draft')" in frontend_workbench,
+        )
+    )
+    checks.append(
+        check(
+            "frontend project list shows readiness summary",
+            all(
+                token in frontend_workbench
+                for token in [
+                    "readiness_summary",
+                    "Project Readiness",
+                    "attachment_needs_page_hint",
+                    "scoring_needs_bidder_evidence",
+                ]
+            ),
         )
     )
     checks.append(

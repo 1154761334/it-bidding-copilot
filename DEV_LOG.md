@@ -295,3 +295,31 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: expose scoring and attachment readiness in project list/detail summaries so users can triage projects before opening each artifact.
+
+## 2026-05-08 Round 12
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `46/46`, project `34`, evidence trace length `70`.
+- Lowest item: scoring and attachment readiness were visible inside single-project Review tab and `review.md`, but `/projects` and the `/bid` project list did not expose a quick readiness signal. Users had to open each project before seeing whether attachment positioning or scoring evidence still needed work.
+
+### Changes
+- Added a derived `readiness_summary` to the public project API shape, available from both `/projects` and `/projects/{id}` after review artifacts exist.
+- Summarized attachment ready/total, attachment page/asset gaps, scoring ready/total, scoring gaps, bidder-evidence gaps, and review risk statuses without duplicating raw artifacts into project records.
+- Updated the frontend project type and bidding store so selecting a project refreshes the cached project-list row with the latest readiness summary.
+- Added compact readiness badges to the `/bid` project list: attachment ready count, attachment gap count, scoring ready count, and scoring gap count.
+- Tightened `eval_bid_assistant.py` from 46 to 48 checks covering API readiness summary exposure and frontend project-list rendering.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingWorkbench.tsx src/services/bidding.ts src/store/bidding/index.ts`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `48/48`, project `37`, evidence trace length `70`.
+- API spot check: `/projects` and `/projects/35` both returned `readiness_summary` with `attachment_ready=16/19`, `attachment_needs_page_hint=3`, `scoring_ready=4/5`, and `scoring_needs_page_hint=1`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS, including a repeat after the final Python formatting pass.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a concise missing-action panel in Review tab that merges subject-name blanks, attachment gaps, and scoring gaps into an operator-ready checklist.
