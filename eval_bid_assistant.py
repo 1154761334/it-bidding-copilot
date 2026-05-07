@@ -439,6 +439,7 @@ def main() -> int:
     frontend_bid_route_secret_test = read_repo_text("frontend/scripts/bidding/testBidRouteSmokeSecrets.mts")
     frontend_bid_route_acceptance_runner = read_repo_text("frontend/scripts/bidding/runBidSmokeAcceptance.mts")
     frontend_bid_route_acceptance_runner_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceRunner.mts")
+    frontend_bid_route_command_matrix_test = read_repo_text("frontend/scripts/bidding/testBidSmokeCommandMatrix.mts")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
@@ -654,6 +655,7 @@ def main() -> int:
                     "credential literal",
                     "runBidSmokeAcceptance.mts",
                     "testBidSmokeAcceptanceRunner.mts",
+                    "testBidSmokeCommandMatrix.mts",
                     "redact",
                     "process.exit(1)",
                 ]
@@ -694,7 +696,7 @@ def main() -> int:
                 token in frontend_package_json
                 for token in [
                     "acceptance:bid-smoke",
-                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run smoke:bid-route",
+                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run smoke:bid-route",
                 ]
             )
             and all(
@@ -705,6 +707,7 @@ def main() -> int:
                     "non-secret static guard",
                     "runtime fixture self-test",
                     "local runner preflight self-test",
+                    "command matrix self-test",
                     "real `/bid` route smoke",
                 ]
             ),
@@ -758,6 +761,25 @@ def main() -> int:
                 ]
             )
             and "test:bid-smoke-acceptance-runner" in frontend_package_json,
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route smoke command matrix has self-test",
+            all(
+                token in frontend_bid_route_command_matrix_test
+                for token in [
+                    "README_PATH",
+                    "commandMatrixSection",
+                    "documentedCommands",
+                    "packageCommands",
+                    "missingFromPackage",
+                    "missingFromMatrix",
+                    "BID_SMOKE_COMMAND_MATRIX_TEST_PASS",
+                ]
+            )
+            and "test:bid-smoke-command-matrix" in frontend_package_json
+            and "pnpm run test:bid-smoke-command-matrix" in frontend_bid_route_runbook,
         )
     )
     checks.append(
