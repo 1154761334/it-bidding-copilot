@@ -316,6 +316,35 @@ def main() -> int:
     )
     checks.append(check("draft has evidence index", "## 七、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |" in draft))
     checks.append(check("draft has material package view", all(token in draft for token in ["### 7.1 材料包视图", "资格证明材料", "商务报价材料", "技术评分附件"])))
+    checks.append(
+        check(
+            "draft material package includes contract execution evidence",
+            all(
+                token in draft
+                for token in [
+                    "| 合同履约材料 | 项目经理/法务 | C1, C2, C3, C4, C5, C6 |",
+                    "Review 阶段追加",
+                    "仅招标依据：C4",
+                    "EVID-131",
+                    "EVID-137",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
+            "draft evidence details include contract obligation records",
+            all(
+                token in draft
+                for token in [
+                    "| EVID-131 | 9.3.4.1售后服务承诺",
+                    "| EVID-137 | 9.3.4.6.1售后服务响应方式",
+                    "| EVID-199 | 十、违约责任",
+                    "| EVID-200 | 十二、违约解除合同",
+                ]
+            ),
+        )
+    )
     checks.append(check("draft evidence index tracks attachment readiness", all(token in draft for token in ["页码/资产提示", "装订状态", "需回填页码"])))
     checks.append(check("draft avoids page placeholders", "第 **X** 页" not in draft and "第X页" not in draft))
     checks.append(check("draft avoids unsupported provided claims", "待补充对应证明材料，正式稿不得写成已提供" not in draft))

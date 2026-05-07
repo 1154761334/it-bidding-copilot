@@ -579,3 +579,30 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: update the draft evidence index/material package view to include Review-stage C-row contract evidence under `合同履约材料`, so appendix evidence is visible in the draft's own evidence index rather than only in trace/review/handoff artifacts.
+
+## 2026-05-08 Round 22
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `84/84`, project `74`, evidence trace length `94`.
+- Lowest item: `draft.md` had the contract response appendix, but its own `## 七、证据索引` still only reflected Execute-stage matrix evidence. Review-stage C-row contract evidence was visible in trace/review/handoff and appendix prose, but not as a `合同履约材料` row or contract evidence detail inside the draft evidence index.
+
+### Changes
+- Added a Review-stage draft evidence-index enhancer that inserts `合同履约材料` into `### 7.1 材料包视图` with C1-C6 row ids, contract evidence ids, pending signoff rows, and C4 tender-only boundary.
+- Added missing C-row contract evidence records into `### 7.2 证据明细`, sourced from `evidence_trace.json`, while avoiding duplicate evidence detail rows already present from Execute-stage evidence.
+- Passed the merged Review evidence trace into draft enhancement so draft index, contract appendix, review, handoff, and trace stay aligned.
+- Kept the contract appendix idempotent by rebuilding it from the pre-appendix draft and replacing any prior `合同履约材料` material row.
+- Tightened `eval_bid_assistant.py` from 84 to 86 checks, explicitly covering contract material-package visibility and contract-only evidence detail rows in `draft.md`.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `86/86`, project `75`, evidence trace length `94`.
+- Artifact spot check: project `75` `draft.md` shows `合同履约材料` in `7.1` with C1-C6 and `仅招标依据：C4`, plus `EVID-131`, `EVID-137`, `EVID-199`, and `EVID-200` in `7.2` evidence details; `project.json` still exposes six draft sections including `合同履约响应附录`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: make the `/bid` Draft or Evidence tab expose an artifact-local material-package summary/jump target for `合同履约材料`, so operators can move from the visible draft index row to the corresponding trace details without scanning the Markdown manually.

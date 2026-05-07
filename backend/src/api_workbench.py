@@ -1277,12 +1277,84 @@ def _merge_evidence_trace(
     return merged
 
 
+def _draft_with_contract_evidence_index(
+    draft_markdown: str,
+    contract_obligation_readiness: dict[str, Any],
+    trace: list[dict[str, Any]],
+) -> str:
+    rows = contract_obligation_readiness.get("rows") or []
+    if not rows:
+        return draft_markdown
+
+    contract_ids = _unique([evidence_id for row in rows for evidence_id in row.get("evidence_ids", [])])
+    if not contract_ids:
+        return draft_markdown
+
+    group_meta = _material_group_meta("contract_execution_documents")
+    row_ids = _unique([str(row.get("row_id") or "") for row in rows if row.get("row_id")])
+    not_ready = _unique([str(row.get("row_id") or "") for row in contract_obligation_readiness.get("not_ready_rows", []) if row.get("row_id")])
+    tender_only = _unique([str(row.get("row_id") or "") for row in rows if row.get("status") == "tender_only"])
+    hint_parts = [group_meta["binding_hint"], "Review 阶段追加，需与合同履约响应附录交叉复核。"]
+    if not_ready:
+        hint_parts.append(f"待签核：{', '.join(not_ready)}。")
+    if tender_only:
+        hint_parts.append(f"仅招标依据：{', '.join(tender_only)}。")
+    material_line = (
+        f"| {_md_cell(group_meta['label'])} | {_md_cell(group_meta['owner'])} | "
+        f"{_md_cell(', '.join(row_ids) or '无')} | {_md_cell(', '.join(contract_ids) or '待补充')} | "
+        f"{_md_cell(''.join(hint_parts))} |"
+    )
+
+    lines = [line for line in draft_markdown.splitlines() if not line.startswith("| 合同履约材料 |")]
+    material_start = _line_index(lines, "### 7.1 材料包视图")
+    material_end = _line_index(lines, "### 7.2 证据明细")
+    if material_start >= 0 and material_end > material_start:
+        insert_at = material_end
+        for index in range(material_start, material_end):
+            if lines[index].startswith("| 技术评分附件 |"):
+                insert_at = index
+                break
+            if lines[index].startswith("| 商务报价材料 |"):
+                insert_at = index + 1
+        lines.insert(insert_at, material_line)
+
+    detail_existing = {match.group(1) for line in lines if (match := re.match(r"^\| (EVID-\d+) \|", line))}
+    trace_by_id: dict[str, dict[str, Any]] = {}
+    for item in trace:
+        evidence_id = str(item.get("evidence_id") or "")
+        if evidence_id in contract_ids and item.get("material_group_key") == "contract_execution_documents":
+            trace_by_id.setdefault(evidence_id, item)
+
+    detail_lines = []
+    for evidence_id in contract_ids:
+        if evidence_id in detail_existing or evidence_id not in trace_by_id:
+            continue
+        item = trace_by_id[evidence_id]
+        detail_lines.append(
+            f"| {_md_cell(item['evidence_id'])} | {_md_cell(item.get('title') or '')} | {_md_cell(item.get('source_doc') or '')} | {_md_cell(item.get('heading_path') or '')} | {_md_cell(_page_or_asset_hint(item) or '需回填页码')} | {_md_cell(_binding_status(item))} |"
+        )
+
+    if detail_lines:
+        lines.extend(detail_lines)
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _line_index(lines: list[str], target: str) -> int:
+    for index, line in enumerate(lines):
+        if line == target:
+            return index
+    return -1
+
+
 def _draft_with_contract_obligation_appendix(
     draft_markdown: str,
     contract_obligation_readiness: dict[str, Any],
+    trace: list[dict[str, Any]] | None = None,
 ) -> str:
     marker = "## 八、合同履约响应附录"
     base = draft_markdown.split(f"\n{marker}", 1)[0].rstrip()
+    base = _draft_with_contract_evidence_index(base, contract_obligation_readiness, trace or [])
     lines = [
         marker,
         "",
@@ -1752,7 +1824,7 @@ def generate_review(project_id: str, db: Session) -> dict[str, Any]:
         "findings": findings,
     }
     draft_text = read_artifact_text(project_id, "draft.md")
-    reviewed_draft = _draft_with_contract_obligation_appendix(draft_text, contract_obligation_readiness)
+    reviewed_draft = _draft_with_contract_obligation_appendix(draft_text, contract_obligation_readiness, trace)
     _write_artifact(project_id, "draft.md", reviewed_draft)
     project["draft_markdown"] = reviewed_draft
     if not any(item.get("name") == "合同履约响应附录" for item in project.get("draft_sections", [])):
