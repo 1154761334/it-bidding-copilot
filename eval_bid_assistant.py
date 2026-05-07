@@ -951,7 +951,7 @@ def main() -> int:
                 token in frontend_bid_route_preflight_order_test
                 for token in [
                     "BID_SMOKE_PREFLIGHT_ORDER_PACKAGE",
-                    "ORDERED_SERVICE_FREE_COMMANDS",
+                    "orderedServiceFreeCommands",
                     "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS",
                     "runtime-preflight-order",
                     "summary_after_port_preflight",
@@ -967,6 +967,26 @@ def main() -> int:
             and "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS" in frontend_bid_route_runbook
             and "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS" in frontend_bid_route_acceptance_manifest
             and "testBidSmokePreflightOrder.mts" in frontend_bid_route_secret_check,
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid smoke preflight order derives manifest",
+            all(
+                token in frontend_bid_route_preflight_order_test
+                for token in [
+                    "BID_SMOKE_PREFLIGHT_ORDER_MANIFEST",
+                    "serviceFreeCommandsFromManifest",
+                    "manifest.sub_artifacts",
+                    "artifact.status === manifest.expected_terminal_status",
+                    "Manifest terminal artifact must be last.",
+                    "moveArtifactAfter",
+                    "manifest_order_drift",
+                    "preflight-order-manifest.json",
+                    "Preflight order drift: pnpm run test:bid-smoke-command-matrix must run after pnpm run test:bid-smoke-acceptance-manifest.",
+                ]
+            )
+            and "derives the service-free command list from the manifest" in frontend_bid_route_runbook,
         )
     )
     checks.append(

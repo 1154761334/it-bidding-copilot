@@ -1440,3 +1440,48 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: make the order guard derive its service-free command list from `bidSmokeAcceptanceManifest.json`, or add a negative fixture proving the manifest order and package-script order cannot drift independently.
+
+## 2026-05-08 Round 47
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `111/111`, project `190`, evidence trace length `94`.
+- Lowest item: the order guard proved package-script command order, but its service-free command list was still hardcoded, so the acceptance manifest order and package-script order could drift independently.
+
+### Changes
+- Updated `frontend/scripts/bidding/testBidSmokePreflightOrder.mts` to read `scripts/bidding/bidSmokeAcceptanceManifest.json` through `BID_SMOKE_PREFLIGHT_ORDER_MANIFEST` and derive the service-free command list from manifest sub-artifacts.
+- Added manifest contract assertions for schema version, preflight gate, `service-free` mode, terminal status presence, terminal artifact placement, and package-script command shape.
+- Added a `manifest_order_drift` negative fixture that moves `command_matrix_guard` after `acceptance_manifest_guard` in a temporary manifest and requires an explicit ordering failure.
+- Wrote both package and manifest runtime fixture snapshots under the temporary preflight-order directory.
+- Updated the bid smoke runbook to state that `test:bid-smoke-preflight-order` derives its service-free command list from the manifest.
+- Tightened `eval_bid_assistant.py` from 111 to 112 checks by requiring the manifest-derived order path, manifest drift fixture, terminal-artifact assertion, and runbook wording.
+
+### Verification
+- `cd backend && venv/bin/python -m py_compile ../eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-preflight-order`: PASS, emitted `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS` for `summary_after_port_preflight`, `manifest_after_route_smoke`, and `manifest_order_drift` cases.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `112/112`, project `192`, evidence trace length `94`.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary-failure`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS` before `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm exec eslint ...`: PASS for the bid smoke scripts touched and referenced in this round.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints warning-level output, but exits 0.
+- `cd frontend && pnpm exec prettier --check ...`: PASS for package/runbook/manifest and touched bid smoke scripts.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`.
+- `pgrep -af '[u]vicorn|[v]ite|[n]ext' || true`: PASS, no matching processes remained after local acceptance.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- Final `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `112/112`, project `195`, evidence trace length `94`.
+
+### Artifacts
+- `pnpm run test:bid-smoke-preflight-order` now provides a manifest-derived service-free command-order artifact for the `/bid` acceptance chain.
+- The runtime preflight-order fixture now includes `preflight-order-manifest.json` alongside `preflight-order-package.json`.
+- `acceptance:bid-smoke:preflight` now proves the manifest command order cannot drift independently from the package-script order before final port readiness.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a manifest/order schema fixture that mutates terminal artifact placement or status to prove the preflight port guard cannot be omitted, duplicated, or moved away from the terminal position.
