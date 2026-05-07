@@ -1399,3 +1399,44 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a service-free negative fixture for exact preflight command ordering so newly added summary/manifest guards cannot drift behind service-starting smoke steps.
+
+## 2026-05-08 Round 46
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `110/110`, project `184`, evidence trace length `94`.
+- Lowest item: preflight commands were present and individually guarded, but no service-free negative fixture proved summary/manifest guards could not drift behind the port preflight guard or route smoke command.
+
+### Changes
+- Added `frontend/scripts/bidding/testBidSmokePreflightOrder.mts`, which parses `package.json`, verifies the exact service-free command order for both `acceptance:bid-smoke` and `acceptance:bid-smoke:preflight`, and emits `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS`.
+- Added runtime negative fixtures inside the order guard: one moves `test:bid-smoke-preflight-summary` behind the port preflight guard, and one moves `test:bid-smoke-acceptance-manifest` behind route smoke; both must fail with explicit ordering diagnostics.
+- Added `test:bid-smoke-preflight-order` to `frontend/package.json` and wired it before production docs and final smoke/port checks in both bid smoke acceptance presets.
+- Updated the compact acceptance manifest, runbook command matrix, acceptance manifest self-test, and secret guard scan surface to include `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS`.
+- Tightened `eval_bid_assistant.py` from 110 to 111 checks by requiring the order guard, negative fixture drift cases, package/runbook/manifest wiring, and secret guard coverage.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-preflight-order`: PASS, emitted `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS` for `summary_after_port_preflight` and `manifest_after_route_smoke` drift cases.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary`: PASS, emitted `BID_SMOKE_PREFLIGHT_SUMMARY_TEST_PASS` with 13 sub-artifacts and terminal status `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS` with 13 recorded statuses.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS, now includes `test:bid-smoke-preflight-order` in documented/package command coverage.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, scans the preflight order fixture.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS` before `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm exec eslint ...`: PASS for the bid smoke scripts touched in this round.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `111/111`, project `189`, evidence trace length `94`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream warning-level output, but exits 0.
+- `cd frontend && pnpm exec prettier --check ...`: PASS for package/runbook/manifest and touched bid smoke scripts.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `pnpm run test:bid-smoke-preflight-order` now provides a service-free negative artifact for command-order drift in the `/bid` acceptance chain.
+- `scripts/bidding/bidSmokeAcceptanceManifest.json` now records 13 preflight sub-artifact statuses including the order fixture.
+- `acceptance:bid-smoke:preflight` now proves ordering before production docs fixtures and final port readiness.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: make the order guard derive its service-free command list from `bidSmokeAcceptanceManifest.json`, or add a negative fixture proving the manifest order and package-script order cannot drift independently.

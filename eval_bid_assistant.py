@@ -441,6 +441,7 @@ def main() -> int:
     frontend_bid_route_acceptance_manifest = read_repo_text("frontend/scripts/bidding/bidSmokeAcceptanceManifest.json")
     frontend_bid_route_acceptance_manifest_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceManifest.mts")
     frontend_bid_route_acceptance_manifest_drift_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceManifestDrift.mts")
+    frontend_bid_route_preflight_order_test = read_repo_text("frontend/scripts/bidding/testBidSmokePreflightOrder.mts")
     frontend_bid_route_preflight_summary_test = read_repo_text("frontend/scripts/bidding/testBidSmokePreflightSummary.mts")
     frontend_bid_route_preflight_summary_failure_test = read_repo_text("frontend/scripts/bidding/testBidSmokePreflightSummaryFailure.mts")
     frontend_bid_route_acceptance_runner_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceRunner.mts")
@@ -670,6 +671,7 @@ def main() -> int:
                     "testBidSmokeAcceptanceManifest.mts",
                     "testBidSmokeAcceptanceRunner.mts",
                     "testBidSmokeCommandMatrix.mts",
+                    "testBidSmokePreflightOrder.mts",
                     "testBidSmokePreflightSummaryFailure.mts",
                     "testBidSmokePreflightSummary.mts",
                     "redact",
@@ -712,7 +714,7 @@ def main() -> int:
                 token in frontend_package_json
                 for token in [
                     "acceptance:bid-smoke",
-                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-smoke-acceptance-manifest && pnpm run test:bid-smoke-acceptance-manifest-drift && pnpm run test:bid-smoke-preflight-summary && pnpm run test:bid-smoke-preflight-summary-failure && pnpm run test:bid-route-production-docs && pnpm run test:bid-route-production-docs-failure && pnpm run test:bid-route-production-docs-drift && pnpm run smoke:bid-route",
+                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-smoke-acceptance-manifest && pnpm run test:bid-smoke-acceptance-manifest-drift && pnpm run test:bid-smoke-preflight-summary && pnpm run test:bid-smoke-preflight-summary-failure && pnpm run test:bid-smoke-preflight-order && pnpm run test:bid-route-production-docs && pnpm run test:bid-route-production-docs-failure && pnpm run test:bid-route-production-docs-drift && pnpm run smoke:bid-route",
                 ]
             )
             and all(
@@ -728,6 +730,7 @@ def main() -> int:
                     "its drift fixture",
                     "preflight CI summary export",
                     "its failure fixture",
+                    "preflight command order fixture",
                     "production-route docs/storage-state guard",
                     "runtime failure fixture",
                     "path override drift fixture",
@@ -822,10 +825,12 @@ def main() -> int:
                     '"BID_SMOKE_ACCEPTANCE_MANIFEST_DRIFT_TEST_PASS"',
                     '"BID_SMOKE_PREFLIGHT_SUMMARY_TEST_PASS"',
                     '"BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS"',
+                    '"BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS"',
                     '"BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS"',
                     '"BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS"',
                     '"scripts/bidding/runBidSmokeAcceptance.mts"',
                     '"scripts/bidding/testBidSmokeAcceptanceManifestDrift.mts"',
+                    '"scripts/bidding/testBidSmokePreflightOrder.mts"',
                     '"scripts/bidding/testBidSmokePreflightSummaryFailure.mts"',
                     '"scripts/bidding/testBidSmokePreflightSummary.mts"',
                 ]
@@ -842,6 +847,7 @@ def main() -> int:
                     "BID_SMOKE_ACCEPTANCE_MANIFEST_DRIFT_TEST_PASS",
                     "BID_SMOKE_PREFLIGHT_SUMMARY_TEST_PASS",
                     "BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS",
+                    "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS",
                     "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
                     "readme.includes(CANONICAL_MANIFEST_PATH)",
                     "sourceText.includes(artifact.status)",
@@ -852,6 +858,7 @@ def main() -> int:
             and "scripts/bidding/bidSmokeAcceptanceManifest.json" in frontend_bid_route_runbook
             and "bidSmokeAcceptanceManifest.json" in frontend_bid_route_secret_check
             and "testBidSmokeAcceptanceManifestDrift.mts" in frontend_bid_route_secret_check
+            and "testBidSmokePreflightOrder.mts" in frontend_bid_route_secret_check
             and "testBidSmokeAcceptanceManifest.mts" in frontend_bid_route_secret_check,
         )
     )
@@ -939,6 +946,31 @@ def main() -> int:
     )
     checks.append(
         check(
+            "frontend bid smoke preflight order has failure fixture",
+            all(
+                token in frontend_bid_route_preflight_order_test
+                for token in [
+                    "BID_SMOKE_PREFLIGHT_ORDER_PACKAGE",
+                    "ORDERED_SERVICE_FREE_COMMANDS",
+                    "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS",
+                    "runtime-preflight-order",
+                    "summary_after_port_preflight",
+                    "manifest_after_route_smoke",
+                    "moveStepAfter",
+                    "Preflight order drift: pnpm run test:bid-smoke-preflight-summary must run before port preflight guard.",
+                    "Full acceptance order drift: pnpm run test:bid-smoke-acceptance-manifest must run before route smoke command.",
+                    "test:bid-smoke-preflight-order",
+                ]
+            )
+            and "test:bid-smoke-preflight-order" in frontend_package_json
+            and "pnpm run test:bid-smoke-preflight-order" in frontend_bid_route_runbook
+            and "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS" in frontend_bid_route_runbook
+            and "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS" in frontend_bid_route_acceptance_manifest
+            and "testBidSmokePreflightOrder.mts" in frontend_bid_route_secret_check,
+        )
+    )
+    checks.append(
+        check(
             "frontend bid route smoke command matrix is documented",
             all(
                 token in frontend_package_json
@@ -959,6 +991,7 @@ def main() -> int:
                     "pnpm run acceptance:bid-smoke:preflight",
                     "pnpm run acceptance:bid-smoke:local",
                     "pnpm run acceptance:bid-smoke",
+                    "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS",
                     "BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS",
                     "BID_SMOKE_PREFLIGHT_SUMMARY_TEST_PASS",
                     "BID_SMOKE_ACCEPTANCE_MANIFEST_DRIFT_TEST_PASS",
