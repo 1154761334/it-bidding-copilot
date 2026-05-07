@@ -438,6 +438,7 @@ def main() -> int:
     frontend_bid_route_secret_check = read_repo_text("frontend/scripts/bidding/checkBidRouteSmokeSecrets.mts")
     frontend_bid_route_secret_test = read_repo_text("frontend/scripts/bidding/testBidRouteSmokeSecrets.mts")
     frontend_bid_route_acceptance_runner = read_repo_text("frontend/scripts/bidding/runBidSmokeAcceptance.mts")
+    frontend_bid_route_acceptance_runner_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceRunner.mts")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
@@ -651,6 +652,8 @@ def main() -> int:
                     "BID_ROUTE_SMOKE_SECRET_CHECK_PASS",
                     "BID_ROUTE_SMOKE_SECRET_CHECK_FAIL",
                     "credential literal",
+                    "runBidSmokeAcceptance.mts",
+                    "testBidSmokeAcceptanceRunner.mts",
                     "redact",
                     "process.exit(1)",
                 ]
@@ -691,7 +694,7 @@ def main() -> int:
                 token in frontend_package_json
                 for token in [
                     "acceptance:bid-smoke",
-                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run smoke:bid-route",
+                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run smoke:bid-route",
                 ]
             )
             and all(
@@ -701,6 +704,7 @@ def main() -> int:
                     "full local smoke gate",
                     "non-secret static guard",
                     "runtime fixture self-test",
+                    "local runner preflight self-test",
                     "real `/bid` route smoke",
                 ]
             ),
@@ -714,12 +718,14 @@ def main() -> int:
                 for token in [
                     "BID_BACKEND_DIR",
                     "BID_ACCEPTANCE_READY_TIMEOUT_MS",
+                    "BID_ACCEPTANCE_PREFLIGHT_ONLY",
                     "BID_ACCEPTANCE_VERBOSE",
                     "waitForJsonHealth",
                     "waitForFrontend",
                     "terminateProcess",
                     "process.kill(-child.pid",
                     "acceptance:bid-smoke",
+                    "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
                     "BID_SMOKE_ACCEPTANCE_LOCAL_PASS",
                 ]
             )
@@ -730,8 +736,28 @@ def main() -> int:
                     "pnpm run acceptance:bid-smoke:local",
                     "starts temporary FastAPI and Vite",
                     "tears them down",
+                    "BID_ACCEPTANCE_PREFLIGHT_ONLY=1",
+                    "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
                 ]
             ),
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route smoke local runner has preflight self-test",
+            all(
+                token in frontend_bid_route_acceptance_runner_test
+                for token in [
+                    "testBidSmokeAcceptanceRunner",
+                    "BID_ACCEPTANCE_PREFLIGHT_ONLY",
+                    "reserveFreePort",
+                    "Bidding API port is already in use",
+                    "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
+                    "BID_SMOKE_ACCEPTANCE_RUNNER_TEST_PASS",
+                    "BID_SMOKE_ACCEPTANCE_LOCAL_PASS",
+                ]
+            )
+            and "test:bid-smoke-acceptance-runner" in frontend_package_json,
         )
     )
     checks.append(

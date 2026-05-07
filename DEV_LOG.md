@@ -979,3 +979,39 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a CI-safe preflight/failure-path check for the local acceptance runner, covering port-in-use handling without starting real services.
+
+## 2026-05-08 Round 35
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `99/99`, project `135`, evidence trace length `94`.
+- Lowest item: the local acceptance runner managed services successfully, but its port preflight and failure path were not covered by a CI-safe self-test that avoids starting real FastAPI or Vite services.
+
+### Changes
+- Added `BID_ACCEPTANCE_PREFLIGHT_ONLY=1` to `frontend/scripts/bidding/runBidSmokeAcceptance.mts`, allowing operators and CI to validate configured ports without starting services.
+- Added `frontend/scripts/bidding/testBidSmokeAcceptanceRunner.mts`, which uses runtime-only local TCP ports to verify preflight success on free ports and failure on an occupied backend port.
+- Added `test:bid-smoke-acceptance-runner` and included it in `acceptance:bid-smoke`.
+- Expanded the bid smoke secret guard's default scan surface to cover the local runner and its preflight self-test.
+- Updated the bid smoke runbook to document the local runner preflight self-test and expected preflight status.
+- Tightened `eval_bid_assistant.py` from 99 to 100 checks by requiring the preflight mode, self-test script, package entrypoint, and runbook text.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `100/100`, project `139`, evidence trace length `94`.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/README.md scripts/bidding/runBidSmokeAcceptance.mts scripts/bidding/testBidSmokeAcceptanceRunner.mts`: PASS.
+- `cd frontend && pnpm exec eslint scripts/bidding/runBidSmokeAcceptance.mts scripts/bidding/testBidSmokeAcceptanceRunner.mts scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidRouteSmokeSecrets.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-runner`: PASS, emitted `BID_SMOKE_ACCEPTANCE_RUNNER_TEST_PASS`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_SMOKE_ACCEPTANCE_RUNNER_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `pnpm run test:bid-smoke-acceptance-runner` now provides a service-free preflight artifact for the local acceptance runner.
+- `BID_ACCEPTANCE_PREFLIGHT_ONLY=1` emits `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS` on free configured ports and fails early on occupied ports.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a short CI/runbook matrix showing which bid smoke command to use for service-free checks, local managed services, and already-running service checks.
