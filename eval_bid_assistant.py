@@ -489,6 +489,22 @@ def main() -> int:
     )
     checks.append(
         check(
+            "frontend draft tab shows artifact material package jumps",
+            all(
+                token in frontend_draft_tab
+                for token in [
+                    "ArtifactMaterialPackageSummary",
+                    "Artifact Material Packages",
+                    "buildArtifactMaterialPackages",
+                    "handleSelectMaterialPackage",
+                    "CONTRACT_EXECUTION_GROUP_KEY",
+                    "Open trace",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
             "frontend evidence tab has material group presets",
             all(
                 token in frontend_evidence_tab

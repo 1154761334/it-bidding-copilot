@@ -606,3 +606,30 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: make the `/bid` Draft or Evidence tab expose an artifact-local material-package summary/jump target for `合同履约材料`, so operators can move from the visible draft index row to the corresponding trace details without scanning the Markdown manually.
+
+## 2026-05-08 Round 23
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `86/86`, project `77`, evidence trace length `94`.
+- Lowest item: `/bid` Draft already rendered Markdown tables and had a right-side material-group trace filter, but operators still had to scan the artifact body or the trace panel manually to jump from a visible material package such as `合同履约材料` to its evidence trace details.
+
+### Changes
+- Added an `Artifact Material Packages` strip above the Draft artifact preview, derived from the current artifact text, `material_groups`, and loaded `evidence_trace.json`.
+- Added package buttons with row, evidence, trace, and missing-row counts; clicking a package selects the corresponding material-group filter and opens the first matching evidence trace record.
+- Highlighted the contract execution package via the `contract_execution_documents` group key without hardcoding generated evidence ids.
+- Added a lucide package icon for the package strip and kept the existing Markdown/table/evidence badge rendering path unchanged.
+- Tightened `eval_bid_assistant.py` from 86 to 87 checks covering the Draft tab package jump surface.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingDraftTab.tsx`: PASS after import-sort autofix.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `87/87`, project `78`, evidence trace length `94`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a focused `/bid` smoke test or Playwright check for the Draft material-package strip so the UI behavior is verified by rendering, not only by static source checks and production build.
