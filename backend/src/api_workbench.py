@@ -933,7 +933,19 @@ def _review_finding(severity: str, area: str, message: str, suggestion: str, buc
 
 
 def _review_action(priority: str, area: str, action: str, owner: str, references: list[str]) -> dict[str, Any]:
-    return {"priority": priority, "area": area, "action": action, "owner": owner, "references": references}
+    evidence_ids = [ref for ref in references if re.fullmatch(r"EVID-\d+", str(ref))]
+    row_ids = [ref for ref in references if re.fullmatch(r"[HTS]\d+", str(ref))]
+    artifact_refs = [ref for ref in references if str(ref).endswith(".md")]
+    return {
+        "priority": priority,
+        "area": area,
+        "action": action,
+        "owner": owner,
+        "references": references,
+        "evidence_ids": _unique(evidence_ids),
+        "row_ids": _unique(row_ids),
+        "artifact_refs": _unique(artifact_refs),
+    }
 
 
 def _load_evidence_trace(project_id: str) -> list[dict[str, Any]]:
@@ -1304,6 +1316,23 @@ def _review_markdown(review: dict[str, Any]) -> str:
         )
     if not review.get("action_checklist"):
         lines.append("| low | 暂无阻断项 | 项目经理 | review.md |")
+    lines.append("")
+
+    lines += [
+        "## 操作证据定位",
+        "",
+        "| 事项 | 关联行 | 证据ID | Artifact |",
+        "|---|---|---|---|",
+    ]
+    for item in review.get("action_checklist", []):
+        row_ids = ", ".join(item.get("row_ids") or []) or "无"
+        evidence_ids = ", ".join(item.get("evidence_ids") or []) or "无"
+        artifact_refs = ", ".join(item.get("artifact_refs") or []) or "无"
+        lines.append(
+            f"| {_md_cell(item['area'])} | {_md_cell(row_ids)} | {_md_cell(evidence_ids)} | {_md_cell(artifact_refs)} |"
+        )
+    if not review.get("action_checklist"):
+        lines.append("| 暂无阻断项 | 无 | 无 | review.md |")
     lines.append("")
 
     lines += [

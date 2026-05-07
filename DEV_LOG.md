@@ -410,3 +410,30 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add review-side filtering that opens the exact artifact evidence rows for each action checklist item, so operators can jump from a risk/action directly to its supporting evidence ids and missing page/asset records.
+
+## 2026-05-08 Round 16
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `60/60`, project `52`, evidence trace length `70`.
+- Lowest item: `action_checklist` still exposed only text references. Reviewers could not reliably distinguish evidence ids, response-matrix rows, and artifact names from each action item without manual parsing.
+
+### Changes
+- Enriched each review `action_checklist` item with structured `evidence_ids`, `row_ids`, and `artifact_refs`, derived from the existing references without inventing new evidence.
+- Added `## 操作证据定位` to `review.md`, mapping each action area to associated rows, evidence ids, and artifacts.
+- Updated `/bid` Review tab to render an Action Evidence block inside each action item, including row badges, evidence id badges, artifact refs, and attachment-readiness details from the review payload.
+- Tightened `eval_bid_assistant.py` from 60 to 63 checks covering API action evidence links, review Markdown evidence index, and frontend rendering.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingReviewTab.tsx`: PASS.
+- `cd frontend && pnpm run type-check`: PASS after adding explicit `Map<string, any>` typing.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `63/63`, project `53`, evidence trace length `70`.
+- Artifact spot check: project `53` `review.md` contains `## 操作证据定位` with `附件定位` evidence `EVID-42/EVID-38/EVID-74` and `评分定位` row `S3` plus `EVID-74`; `project.json` action items expose structured rows, evidence ids, and artifact refs.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a compact project-level export/readiness handoff artifact that summarizes remaining human actions, material groups, and evidence gaps for commercial trial users.

@@ -134,9 +134,17 @@ def main() -> int:
             bool(action_checklist)
             and all(
                 key in action_checklist[0]
-                for key in ["priority", "area", "action", "owner", "references"]
+                for key in ["priority", "area", "action", "owner", "references", "evidence_ids", "row_ids", "artifact_refs"]
             ),
             str(action_checklist[:1]),
+        )
+    )
+    checks.append(
+        check(
+            "project action checklist has evidence links",
+            any(item.get("evidence_ids") for item in action_checklist)
+            and any(item.get("row_ids") for item in action_checklist),
+            str(action_checklist),
         )
     )
     material_groups = review_payload.get("material_groups") or []
@@ -223,6 +231,12 @@ def main() -> int:
         check(
             "review has action checklist",
             all(token in review for token in ["## 操作清单", "责任人", "附件定位", "评分定位"]),
+        )
+    )
+    checks.append(
+        check(
+            "review has action evidence index",
+            all(token in review for token in ["## 操作证据定位", "关联行", "证据ID", "Artifact"]),
         )
     )
     checks.append(check("review has material group review", all(token in review for token in ["## 材料包复核", "资格证明材料", "商务报价材料", "技术评分附件"])))
@@ -327,6 +341,21 @@ def main() -> int:
         check(
             "frontend review tab shows action checklist",
             all(token in frontend_review_tab for token in ["action_checklist", "Action Checklist", "owner"]),
+        )
+    )
+    checks.append(
+        check(
+            "frontend review tab shows action evidence links",
+            all(
+                token in frontend_review_tab
+                for token in [
+                    "Action Evidence",
+                    "attachmentByEvidenceId",
+                    "evidence_ids",
+                    "row_ids",
+                    "artifact_refs",
+                ]
+            ),
         )
     )
     checks.append(check("frontend review tab shows material groups", all(token in frontend_review_tab for token in ["material_groups", "Material Groups", "row_ids"])))
