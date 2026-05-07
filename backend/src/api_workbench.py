@@ -773,6 +773,10 @@ def _review_finding(severity: str, area: str, message: str, suggestion: str, buc
     return {"severity": severity, "area": area, "message": message, "suggestion": suggestion, "bucket": bucket}
 
 
+def _review_action(priority: str, area: str, action: str, owner: str, references: list[str]) -> dict[str, Any]:
+    return {"priority": priority, "area": area, "action": action, "owner": owner, "references": references}
+
+
 def _load_evidence_trace(project_id: str) -> list[dict[str, Any]]:
     try:
         trace = json.loads(read_artifact_text(project_id, "evidence_trace.json"))
@@ -865,6 +869,89 @@ def _scoring_readiness(scoring_rows: list[dict[str, str]], attachment_readiness:
         "rows": rows,
         "not_ready_rows": [row for row in rows if row["status"] != "ready"],
     }
+
+
+def _action_checklist(
+    project: dict[str, Any],
+    commercial_rows: list[dict[str, str]],
+    missing_hard: list[dict[str, str]],
+    attachment_readiness: dict[str, Any],
+    scoring_readiness: dict[str, Any],
+) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+
+    if missing_hard:
+        actions.append(
+            _review_action(
+                "high",
+                "废标风险",
+                "补齐未覆盖硬性条款的真实证明材料，或在正式稿中改为待补充，不得宣称已满足。",
+                "投标负责人",
+                [row["id"] for row in missing_hard],
+            )
+        )
+
+    if "投标人待填写" in project.get("draft_markdown", ""):
+        actions.append(
+            _review_action(
+                "high",
+                "主体信息",
+                "回填投标人全称，并同步封面、授权书、偏离表和签章页。",
+                "商务负责人",
+                ["投标人待填写"],
+            )
+        )
+
+    if commercial_rows:
+        actions.append(
+            _review_action(
+                "medium",
+                "商务复核",
+                "复核报价、付款、履约保证金、发票类型和投标有效期口径，完成商务签核。",
+                "商务负责人",
+                [row["id"] for row in commercial_rows[:8]],
+            )
+        )
+
+    if attachment_readiness["needs_page_hint"]:
+        references = [item["evidence_id"] for item in attachment_readiness["missing_records"][:8]]
+        actions.append(
+            _review_action(
+                "medium",
+                "附件定位",
+                f"回填 {attachment_readiness['needs_page_hint']} 项投标人侧证据的页码、截图编号或附件文件名。",
+                "装订负责人",
+                references,
+            )
+        )
+
+    if scoring_readiness["not_ready_rows"]:
+        row_ids = [row["row_id"] for row in scoring_readiness["not_ready_rows"][:8]]
+        evidence_ids = [
+            evidence_id
+            for row in scoring_readiness["not_ready_rows"]
+            for evidence_id in row.get("missing_evidence_ids", [])
+        ][:8]
+        actions.append(
+            _review_action(
+                "medium",
+                "评分定位",
+                f"处理 {len(scoring_readiness['not_ready_rows'])} 个未就绪评分项，补齐投标人证明或页码/附件编号。",
+                "技术/商务负责人",
+                row_ids + evidence_ids,
+            )
+        )
+
+    actions.append(
+        _review_action(
+            "low",
+            "终稿复核",
+            "装订前复核签章状态、原件/复印件一致性、附件目录和证据索引交叉引用。",
+            "项目经理",
+            ["review.md", "draft.md"],
+        )
+    )
+    return actions
 
 
 def generate_review(project_id: str) -> dict[str, Any]:
@@ -990,6 +1077,13 @@ def generate_review(project_id: str) -> dict[str, Any]:
             "items": [item["message"] for item in findings if item["bucket"] == "签章与材料风险"],
         },
     ]
+    action_checklist = _action_checklist(
+        project,
+        commercial_rows,
+        missing_hard,
+        attachment_readiness,
+        scoring_readiness,
+    )
 
     review = {
         "score_coverage": {"covered": covered_rows, "total": total_rows},
@@ -1000,6 +1094,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
         "attachment_readiness": attachment_readiness,
         "scoring_readiness": scoring_readiness,
         "risk_buckets": risk_buckets,
+        "action_checklist": action_checklist,
         "findings": findings,
     }
     _write_artifact(project_id, "review.md", _review_markdown(review))
@@ -1033,6 +1128,22 @@ def _review_markdown(review: dict[str, Any]) -> str:
         for item in bucket.get("items", []):
             lines.append(f"- {item}")
         lines.append("")
+
+    lines += [
+        "## 操作清单",
+        "",
+        "| 优先级 | 事项 | 责任人 | 证据/对象 |",
+        "|---|---|---|---|",
+    ]
+    for item in review.get("action_checklist", []):
+        action = item["area"] + "：" + item["action"]
+        references = ", ".join(item["references"]) or "无"
+        lines.append(
+            f"| {_md_cell(item['priority'])} | {_md_cell(action)} | {_md_cell(item['owner'])} | {_md_cell(references)} |"
+        )
+    if not review.get("action_checklist"):
+        lines.append("| low | 暂无阻断项 | 项目经理 | review.md |")
+    lines.append("")
 
     lines += [
         "## 附件就绪度",

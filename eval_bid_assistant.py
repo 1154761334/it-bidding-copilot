@@ -126,6 +126,19 @@ def main() -> int:
             str(readiness_summary),
         )
     )
+    review_payload = detail_json.get("review") or {}
+    action_checklist = review_payload.get("action_checklist") or []
+    checks.append(
+        check(
+            "project exposes action checklist",
+            bool(action_checklist)
+            and all(
+                key in action_checklist[0]
+                for key in ["priority", "area", "action", "owner", "references"]
+            ),
+            str(action_checklist[:1]),
+        )
+    )
 
     artifacts = set(demo_json.get("artifacts", []))
     required_artifacts = {"plan.md", "response_matrix.md", "draft.md", "review.md", "evidence_trace.json"}
@@ -187,6 +200,12 @@ def main() -> int:
     checks.append(check("review flags missing form risks", "签章与主体信息" in review and "材料索引" in review))
     checks.append(check("review has attachment readiness", all(token in review for token in ["## 附件就绪度", "投标人侧证据", "装订状态"])))
     checks.append(check("review has scoring readiness", all(token in review for token in ["## 评分就绪度", "评分项就绪", "需补投标人材料"])))
+    checks.append(
+        check(
+            "review has action checklist",
+            all(token in review for token in ["## 操作清单", "责任人", "附件定位", "评分定位"]),
+        )
+    )
     checks.append(
         check(
             "review has actionable risk buckets",
@@ -255,6 +274,12 @@ def main() -> int:
     checks.append(check("frontend evidence panel shows asset paths", all(token in frontend_draft_tab for token in ["asset_paths", "Asset paths"])))
     checks.append(check("frontend review tab shows attachment readiness", all(token in frontend_review_tab for token in ["attachment_readiness", "Attachment Readiness", "needs_page_hint"])))
     checks.append(check("frontend review tab shows scoring readiness", all(token in frontend_review_tab for token in ["scoring_readiness", "Scoring Readiness", "needs_bidder_evidence"])))
+    checks.append(
+        check(
+            "frontend review tab shows action checklist",
+            all(token in frontend_review_tab for token in ["action_checklist", "Action Checklist", "owner"]),
+        )
+    )
     checks.append(check("frontend review tab shows risk buckets", all(token in frontend_review_tab for token in ["risk_buckets", "Risk Buckets", "bucket.status"])))
 
     passed = sum(1 for item in checks if item["ok"])

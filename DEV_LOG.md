@@ -323,3 +323,31 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a concise missing-action panel in Review tab that merges subject-name blanks, attachment gaps, and scoring gaps into an operator-ready checklist.
+
+## 2026-05-08 Round 13
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `48/48`, project `39`, evidence trace length `70`.
+- Lowest item: Review tab exposed coverage, readiness, risk buckets, and findings, but operators still had to mentally merge主体信息、商务签核、附件定位 and 评分定位 into next actions.
+
+### Changes
+- Added a structured `action_checklist` to the review API payload.
+- Generated action items from real review state: missing hard clauses, bidder subject placeholder, high-risk commercial rows, attachment page/asset gaps, scoring readiness gaps, and final signing/material review.
+- Added a `## 操作清单` section to `review.md` with priority, action, owner, and evidence/object references.
+- Rendered Action Checklist in `/bid` Review tab before the detailed readiness sections.
+- Tightened `eval_bid_assistant.py` from 48 to 51 checks covering project API action checklist, review Markdown checklist, and frontend rendering.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingReviewTab.tsx`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `51/51`, project `42`, evidence trace length `70`.
+- Artifact spot check: project `40` `review.md` action checklist includes 主体信息, 商务复核, 附件定位 with `EVID-42/EVID-38/EVID-74`, 评分定位 with `S3/EVID-74`, and 终稿复核.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS, including a repeat after the final Python formatting pass.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: improve response matrix extraction so the plan/review can distinguish legal qualification documents,商务报价 documents, and technical scoring attachments before draft generation.
