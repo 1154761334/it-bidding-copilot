@@ -54,3 +54,29 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: compare generated draft language against the real tender scoring table clause by clause and add stronger acceptance checks for commercial quotation and delivery-period consistency.
+
+## 2026-05-07 Round 3
+
+### Baseline
+- Lowest item: `/bid` frontend real-case display loop. Backend artifacts were valid, but the workbench only exposed "Demo Real Case" after a project was selected, did not auto-select the generated demo project, did not auto-open `draft.md`, and could keep a stale artifact body while switching projects.
+- The evaluator did not cover this frontend behavior, so a regression could still pass backend-only artifact checks.
+
+### Changes
+- Made `runDemo` return the generated project id, refresh projects, select the generated project, and fetch the default artifact with `draft.md` preferred.
+- Reset artifact list/content when switching projects to avoid stale artifact display.
+- Kept "Demo Real Case" available without a selected project and switched the workbench to the Draft tab after a successful demo run.
+- Added selected artifact state, active artifact styling, file size, modified time, and evidence-id count to the Draft artifact viewer.
+- Tightened `eval_bid_assistant.py` to check `/bid` route wiring, demo-to-artifact auto-open behavior, and selected artifact metadata display.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `31/31`, project `10`, evidence trace length `70`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: make the Draft tab render Markdown tables more readably or add an artifact-level evidence trace drill-down for each `EVID-*` reference.

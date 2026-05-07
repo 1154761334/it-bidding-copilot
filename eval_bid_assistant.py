@@ -77,6 +77,13 @@ def malformed_table_rows(markdown: str, expected_columns: int | set[int]) -> lis
     return bad
 
 
+def read_repo_text(path: str) -> str:
+    try:
+        return (ROOT / path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
 def main() -> int:
     client = TestClient(app)
     checks: list[dict[str, Any]] = []
@@ -157,6 +164,32 @@ def main() -> int:
     checks.append(check("draft avoids unsupported provided claims", "待补充对应证明材料，正式稿不得写成已提供" not in draft))
     checks.append(check("review flags coverage", "评分覆盖" in review and "硬性条款覆盖" in review))
     checks.append(check("review flags missing form risks", "签章与主体信息" in review and "材料索引" in review))
+
+    frontend_route = read_repo_text("frontend/src/business/client/BusinessDesktopRoutes.tsx")
+    frontend_store = read_repo_text("frontend/src/store/bidding/index.ts")
+    frontend_workbench = read_repo_text("frontend/src/features/Bidding/BiddingWorkbench.tsx")
+    frontend_draft_tab = read_repo_text("frontend/src/features/Bidding/BiddingDraftTab.tsx")
+    checks.append(check("frontend /bid route wired", "path: 'bid'" in frontend_route and "BiddingWorkbench" in frontend_route))
+    checks.append(
+        check(
+            "frontend demo opens generated artifacts",
+            all(
+                token in frontend_store
+                for token in [
+                    "selectProject(result.project_id)",
+                    "fetchArtifactContent(result.project_id",
+                    "pickDefaultArtifact(get().artifacts, 'draft.md')",
+                ]
+            )
+            and "setActiveTab('draft')" in frontend_workbench,
+        )
+    )
+    checks.append(
+        check(
+            "frontend draft tab shows selected artifact metadata",
+            all(token in frontend_draft_tab for token in ["currentArtifactName", "formatBytes", "evidenceCount"]),
+        )
+    )
 
     passed = sum(1 for item in checks if item["ok"])
     total = len(checks)
