@@ -440,6 +440,7 @@ def main() -> int:
     frontend_bid_route_acceptance_runner = read_repo_text("frontend/scripts/bidding/runBidSmokeAcceptance.mts")
     frontend_bid_route_acceptance_runner_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceRunner.mts")
     frontend_bid_route_command_matrix_test = read_repo_text("frontend/scripts/bidding/testBidSmokeCommandMatrix.mts")
+    frontend_bid_route_production_docs_test = read_repo_text("frontend/scripts/bidding/testBidRouteProductionDocs.mts")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
@@ -654,6 +655,7 @@ def main() -> int:
                     "BID_ROUTE_SMOKE_SECRET_CHECK_FAIL",
                     "credential literal",
                     "runBidSmokeAcceptance.mts",
+                    "testBidRouteProductionDocs.mts",
                     "testBidSmokeAcceptanceRunner.mts",
                     "testBidSmokeCommandMatrix.mts",
                     "redact",
@@ -696,7 +698,7 @@ def main() -> int:
                 token in frontend_package_json
                 for token in [
                     "acceptance:bid-smoke",
-                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run smoke:bid-route",
+                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-route-production-docs && pnpm run smoke:bid-route",
                 ]
             )
             and all(
@@ -708,6 +710,7 @@ def main() -> int:
                     "runtime fixture self-test",
                     "local runner preflight self-test",
                     "command matrix self-test",
+                    "production-route docs/storage-state guard",
                     "real `/bid` route smoke",
                 ]
             ),
@@ -841,6 +844,32 @@ def main() -> int:
                     "REQUIRED_MATRIX_COMMANDS",
                 ]
             ),
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route production docs guard is executable",
+            all(
+                token in frontend_bid_route_production_docs_test
+                for token in [
+                    "STORAGE_STATE_DIR = '.auth/'",
+                    "STORAGE_STATE_PATH = '.auth/bid-route-storage-state.json'",
+                    "ALLOWED_COMMAND_ASSIGNMENTS",
+                    "REQUIRED_PRODUCTION_ENV_NAMES",
+                    "markdownSection",
+                    "commandExamples",
+                    "commandAssignments",
+                    "lists environment variable names only",
+                    "Production environment list must contain names only",
+                    "BID_ROUTE_PRODUCTION_DOCS_TEST_PASS",
+                ]
+            )
+            and "test:bid-route-production-docs" in frontend_package_json
+            and "pnpm run test:bid-route-production-docs" in frontend_bid_route_runbook
+            and ".auth/" in frontend_gitignore
+            and ".auth/bid-route-storage-state.json" in frontend_bid_route_storage_capture
+            and "BID_ROUTE_PRODUCTION_DOCS_TEST_PASS" in frontend_bid_route_runbook
+            and "pnpm run test:bid-route-production-docs" in frontend_package_json,
         )
     )
     checks.append(
