@@ -190,6 +190,12 @@ def main() -> int:
             all(token in frontend_draft_tab for token in ["currentArtifactName", "formatBytes", "evidenceCount"]),
         )
     )
+    checks.append(
+        check(
+            "frontend renders markdown artifact tables",
+            all(token in frontend_draft_tab for token in ["ArtifactPreview", "MarkdownTable", "splitMarkdownRow"]),
+        )
+    )
 
     passed = sum(1 for item in checks if item["ok"])
     total = len(checks)

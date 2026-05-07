@@ -80,3 +80,27 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: make the Draft tab render Markdown tables more readably or add an artifact-level evidence trace drill-down for each `EVID-*` reference.
+
+## 2026-05-07 Round 4
+
+### Baseline
+- Lowest item: artifact readability in `/bid`. Round 3 made the real-case flow open generated artifacts, but the Draft tab still displayed Markdown as a raw `<pre>`, making response matrices and draft tables hard to inspect during trial use.
+
+### Changes
+- Added a lightweight in-place Markdown artifact preview for `.md` artifacts without adding dependencies or changing the backend contract.
+- Rendered headings, bullet lists, and Markdown tables as readable UI elements, while leaving JSON artifacts in a raw code block.
+- Highlighted `EVID-*` references inline so reviewers can visually track evidence-backed claims inside draft and matrix artifacts.
+- Tightened `eval_bid_assistant.py` with a frontend check that the Draft tab contains table-aware Markdown artifact rendering.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `32/32`, project `15`, evidence trace length `70`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add artifact evidence trace drill-down from highlighted `EVID-*` references to source document, heading path, and asset hints.
