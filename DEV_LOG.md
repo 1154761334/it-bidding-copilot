@@ -381,3 +381,32 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add material-group filters in `/bid` artifact and evidence panels so reviewers can drill into qualification, commercial, or technical evidence directly from the generated trace.
+
+## 2026-05-08 Round 15
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `57/57`, project `49`, evidence trace length `70`.
+- Lowest item: material groups were present in review artifacts, but `evidence_trace.json` did not carry material-group metadata and `/bid` artifact/evidence panels could not drill into qualification, commercial, or technical evidence directly.
+
+### Changes
+- Added `material_group_key`, `material_group`, and `material_owner` to each generated `evidence_trace.json` record.
+- Added typed `MaterialGroup` and material-group fields to frontend bidding service types.
+- Updated `/bid` Draft artifact preview with a persistent Evidence Trace side panel, material group filters, selected-evidence details, and a filtered trace-record list.
+- Passed project review/execution material groups from the workbench into the Draft artifact viewer.
+- Added Material Group Presets to `/bid` Evidence Search for qualification, commercial, and technical evidence retrieval.
+- Tightened `eval_bid_assistant.py` from 57 to 60 checks covering trace material-group metadata and frontend material-group filtering/presets.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingDraftTab.tsx src/features/Bidding/BiddingEvidenceTab.tsx src/features/Bidding/BiddingWorkbench.tsx src/services/bidding.ts`: PASS after auto-fixing prop order.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `60/60`, project `50`, evidence trace length `70`.
+- Artifact spot check: project `50` `evidence_trace.json` includes `商务报价材料`, `技术评分附件`, and `资格证明材料`; first trace record includes material group key, label, owner, and asset path field.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add review-side filtering that opens the exact artifact evidence rows for each action checklist item, so operators can jump from a risk/action directly to its supporting evidence ids and missing page/asset records.

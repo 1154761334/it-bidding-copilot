@@ -571,6 +571,9 @@ def generate_execution(project_id: str, db: Session) -> dict[str, Any]:
                     "heading_path": item["heading_path"],
                     "page_hint": item["page_hint"],
                     "asset_paths": item.get("asset_paths", []),
+                    "material_group_key": row["material_group_key"],
+                    "material_group": row["material_group"],
+                    "material_owner": row["material_owner"],
                 }
             )
 

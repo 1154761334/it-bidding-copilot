@@ -196,6 +196,13 @@ def main() -> int:
         )
     )
     checks.append(check("trace records include asset paths", all("asset_paths" in item for item in trace)))
+    checks.append(
+        check(
+            "trace records include material groups",
+            all(item.get("material_group_key") and item.get("material_group") for item in trace),
+            str([item for item in trace if not item.get("material_group_key") or not item.get("material_group")][:1]),
+        )
+    )
 
     checks.append(check("draft has realistic structure", all(token in draft for token in ["商务响应", "技术方案", "售后服务方案"])))
     checks.append(check("draft expands technical implementation", all(token in draft for token in ["#### T1", "响应口径", "实现要点", "证据定位", "不写无证据的扩展能力"])))
@@ -230,6 +237,7 @@ def main() -> int:
     frontend_store = read_repo_text("frontend/src/store/bidding/index.ts")
     frontend_workbench = read_repo_text("frontend/src/features/Bidding/BiddingWorkbench.tsx")
     frontend_draft_tab = read_repo_text("frontend/src/features/Bidding/BiddingDraftTab.tsx")
+    frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
     frontend_review_tab = read_repo_text("frontend/src/features/Bidding/BiddingReviewTab.tsx")
     checks.append(check("frontend /bid route wired", "path: 'bid'" in frontend_route and "BiddingWorkbench" in frontend_route))
     checks.append(
@@ -285,6 +293,34 @@ def main() -> int:
         )
     )
     checks.append(check("frontend evidence panel shows asset paths", all(token in frontend_draft_tab for token in ["asset_paths", "Asset paths"])))
+    checks.append(
+        check(
+            "frontend artifact trace filters material groups",
+            all(
+                token in frontend_draft_tab
+                for token in [
+                    "materialGroups",
+                    "Material Group Filter",
+                    "selectedMaterialGroupKey",
+                    "filterEvidenceTrace",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
+            "frontend evidence tab has material group presets",
+            all(
+                token in frontend_evidence_tab
+                for token in [
+                    "Material Group Presets",
+                    "qualification_documents",
+                    "commercial_pricing_documents",
+                    "technical_scoring_attachments",
+                ]
+            ),
+        )
+    )
     checks.append(check("frontend review tab shows attachment readiness", all(token in frontend_review_tab for token in ["attachment_readiness", "Attachment Readiness", "needs_page_hint"])))
     checks.append(check("frontend review tab shows scoring readiness", all(token in frontend_review_tab for token in ["scoring_readiness", "Scoring Readiness", "needs_bidder_evidence"])))
     checks.append(
