@@ -434,6 +434,7 @@ def main() -> int:
     frontend_draft_tab_test = read_repo_text("frontend/src/features/Bidding/BiddingDraftTab.test.tsx")
     frontend_bid_route_smoke = read_repo_text("frontend/scripts/bidding/smokeBidRoute.mts")
     frontend_bid_route_storage_capture = read_repo_text("frontend/scripts/bidding/captureBidRouteStorageState.mts")
+    frontend_bid_route_runbook = read_repo_text("frontend/scripts/bidding/README.md")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
@@ -618,6 +619,23 @@ def main() -> int:
             )
             and "BID_ROUTE_STORAGE_STATE" in frontend_bid_route_smoke
             and "BID_ROUTE_AUTH_REQUIRED" in frontend_bid_route_smoke,
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route production smoke runbook is non-secret",
+            all(
+                token in frontend_bid_route_runbook
+                for token in [
+                    "smoke:bid-route:prod",
+                    "capture:bid-storage-state:prod",
+                    "BID_ROUTE_STORAGE_STATE",
+                    ".auth/bid-route-storage-state.json",
+                    "BID_ROUTE_LOGIN_REQUIRED",
+                    "environment variable names only",
+                    "do not write secret values",
+                ]
+            ),
         )
     )
     checks.append(

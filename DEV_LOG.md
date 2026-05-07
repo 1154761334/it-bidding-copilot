@@ -814,3 +814,33 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a non-secret local production-route runbook that sequences Next startup, storage-state capture, and `smoke:bid-route:prod`, including the expected auth-required diagnostic when storage state is absent.
+
+## 2026-05-08 Round 30
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `94/94`, project `109`, evidence trace length `94`.
+- Lowest item: production-route smoke commands were standardized, but operators still lacked a non-secret runbook that explained the local sequence for Vite smoke, Next production-route storage-state capture, and production-route smoke without exposing credentials.
+
+### Changes
+- Added `frontend/scripts/bidding/README.md` with the default Vite route smoke sequence and the local production-route sequence.
+- The runbook lists environment variable names only, states that secret values must not be written into the repo, and points browser state to the ignored `.auth/bid-route-storage-state.json` artifact.
+- Tightened `eval_bid_assistant.py` from 94 to 95 checks by requiring the non-secret production-route smoke runbook content.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `95/95`, project `112`, evidence trace length `94`.
+- `cd frontend && pnpm exec prettier --check scripts/bidding/README.md package.json`: PASS.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Artifacts
+- `frontend/scripts/bidding/README.md` now documents the safe operator path for `smoke:bid-route`, `capture:bid-storage-state:prod`, and `smoke:bid-route:prod`.
+- The documented local storage-state artifact remains `.auth/bid-route-storage-state.json`, which is ignored by git.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a lightweight CI-safe static check that fails if future bidding smoke docs or diagnostics start including credential-shaped literal values instead of environment variable names.
