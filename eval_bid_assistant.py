@@ -156,9 +156,10 @@ def main() -> int:
             str(material_groups),
         )
     )
+    checks.append(check("project exposes handoff artifact", review_payload.get("handoff_artifact") == "handoff.md", str(review_payload.get("handoff_artifact"))))
 
     artifacts = set(demo_json.get("artifacts", []))
-    required_artifacts = {"plan.md", "response_matrix.md", "draft.md", "review.md", "evidence_trace.json"}
+    required_artifacts = {"plan.md", "response_matrix.md", "draft.md", "review.md", "handoff.md", "evidence_trace.json"}
     for artifact in sorted(required_artifacts):
         checks.append(check(f"artifact {artifact}", artifact in artifacts))
 
@@ -180,6 +181,7 @@ def main() -> int:
     matrix = artifact_text["response_matrix.md"]
     draft = artifact_text["draft.md"]
     review = artifact_text["review.md"]
+    handoff = artifact_text["handoff.md"]
     matrix_rows = table_rows(matrix, 6)
     hard_rows = [row for row in matrix_rows if row[1] == "hard_clause"]
     tech_rows = [row for row in matrix_rows if row[1] == "technical_requirement"]
@@ -246,6 +248,28 @@ def main() -> int:
             all(token in review for token in ["## 风险分桶", "废标风险", "商务条款风险", "评分点风险", "签章与材料风险"]),
         )
     )
+    checks.append(
+        check(
+            "handoff summarizes trial readiness",
+            all(
+                token in handoff
+                for token in [
+                    "# 项目交接摘要",
+                    "## 试用就绪快照",
+                    "## 剩余人工动作",
+                    "## 材料包交接",
+                    "## Artifact Map",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
+            "handoff lists evidence gaps",
+            all(token in handoff for token in ["## 证据缺口", "EVID-74", "S3", "需回填页码"]),
+        )
+    )
+    checks.append(check("handoff states evidence boundary", "未列入证据链的内容不得在正式稿中写成已提供" in handoff))
 
     frontend_route = read_repo_text("frontend/src/business/client/BusinessDesktopRoutes.tsx")
     frontend_store = read_repo_text("frontend/src/store/bidding/index.ts")
@@ -266,6 +290,19 @@ def main() -> int:
                 ]
             )
             and "setActiveTab('draft')" in frontend_workbench,
+        )
+    )
+    checks.append(
+        check(
+            "frontend review opens handoff artifact",
+            all(
+                token in frontend_store
+                for token in [
+                    "'handoff.md'",
+                    "pickDefaultArtifact(get().artifacts, 'handoff.md')",
+                    "fetchArtifactContent(projectId, artifactName)",
+                ]
+            ),
         )
     )
     checks.append(

@@ -1268,9 +1268,11 @@ def generate_review(project_id: str) -> dict[str, Any]:
         "material_groups": material_groups,
         "risk_buckets": risk_buckets,
         "action_checklist": action_checklist,
+        "handoff_artifact": "handoff.md",
         "findings": findings,
     }
     _write_artifact(project_id, "review.md", _review_markdown(review))
+    _write_artifact(project_id, "handoff.md", _handoff_markdown(project, review))
     project["review"] = review
     project["stage"] = "reviewed"
     project["progress"] = 100
@@ -1386,6 +1388,92 @@ def _review_markdown(review: dict[str, Any]) -> str:
             lines.append(f"- [{item['severity']}] {item['area']}: {item['message']} 建议：{item['suggestion']}")
     else:
         lines.append("- 未发现缺材料或废标风险。")
+    return "\n".join(lines) + "\n"
+
+
+def _handoff_markdown(project: dict[str, Any], review: dict[str, Any]) -> str:
+    action_items = review.get("action_checklist", [])
+    material_groups = review.get("material_groups", [])
+    attachment = review.get("attachment_readiness", {})
+    scoring = review.get("scoring_readiness", {})
+    missing_records = attachment.get("missing_records", [])
+    not_ready_rows = scoring.get("not_ready_rows", [])
+    risk_statuses = {bucket.get("name", ""): bucket.get("status", "") for bucket in review.get("risk_buckets", [])}
+
+    lines = [
+        "# 项目交接摘要",
+        "",
+        f"- 项目名称：{project.get('name', '')}",
+        f"- 投标人：{project.get('bidder') or '待填写'}",
+        "- 阶段：reviewed",
+        f"- Handoff Artifact：handoff.md",
+        "",
+        "## 试用就绪快照",
+        "",
+        f"- 硬性条款覆盖：{review['hard_clause_coverage']['covered']}/{review['hard_clause_coverage']['total']}",
+        f"- Response Matrix 覆盖：{review['score_coverage']['covered']}/{review['score_coverage']['total']}",
+        f"- 附件定位：{attachment.get('ready', 0)}/{attachment.get('bidder_total', 0)} 投标人侧证据可定位",
+        f"- 评分就绪：{scoring.get('ready', 0)}/{scoring.get('total', 0)}",
+        f"- 风险状态：{'; '.join(f'{name}={status}' for name, status in risk_statuses.items())}",
+        "",
+        "## 剩余人工动作",
+        "",
+        "| 优先级 | 事项 | 责任人 | 关联行 | 证据ID | Artifact |",
+        "|---|---|---|---|---|---|",
+    ]
+    for item in action_items:
+        lines.append(
+            f"| {_md_cell(item['priority'])} | {_md_cell(item['area'] + '：' + item['action'])} | {_md_cell(item['owner'])} | {_md_cell(', '.join(item.get('row_ids') or []) or '无')} | {_md_cell(', '.join(item.get('evidence_ids') or []) or '无')} | {_md_cell(', '.join(item.get('artifact_refs') or []) or '无')} |"
+        )
+
+    lines += [
+        "",
+        "## 材料包交接",
+        "",
+        "| 材料包 | 责任人 | 状态 | 涉及条款/评分项 | 缺口行 | 装订提示 |",
+        "|---|---|---|---|---|---|",
+    ]
+    for item in material_groups:
+        lines.append(
+            f"| {_md_cell(item['label'])} | {_md_cell(item['owner'])} | {_md_cell(item['status'])} | {_md_cell(', '.join(item.get('row_ids') or []) or '无')} | {_md_cell(', '.join(item.get('missing_rows') or []) or '无')} | {_md_cell(item['binding_hint'])} |"
+        )
+
+    lines += [
+        "",
+        "## 证据缺口",
+        "",
+        "| 类型 | 对象 | 证据ID | 状态 | 处理要求 |",
+        "|---|---|---|---|---|",
+    ]
+    for item in missing_records:
+        lines.append(
+            f"| 附件定位 | {_md_cell(', '.join(item.get('row_ids') or []) or '未绑定行')} | {_md_cell(item['evidence_id'])} | {_md_cell(item.get('status', '需回填页码'))} | 回填页码、截图编号或附件文件名 |"
+        )
+    for item in not_ready_rows:
+        lines.append(
+            f"| 评分就绪 | {_md_cell(item['row_id'])} | {_md_cell(', '.join(item.get('missing_evidence_ids') or item.get('evidence_ids') or []) or '待补充')} | {_md_cell(item['status'])} | {_md_cell(item['manual_check'])} |"
+        )
+    if not missing_records and not not_ready_rows:
+        lines.append("| 无 | 无 | 无 | ready | 暂无证据缺口 |")
+
+    lines += [
+        "",
+        "## Artifact Map",
+        "",
+        "| Artifact | 用途 |",
+        "|---|---|",
+        "| handoff.md | 项目试用交接摘要、剩余人工动作和证据缺口总览 |",
+        "| review.md | 质检发现、风险分桶、附件/评分就绪度 |",
+        "| draft.md | 投标文件草稿和证据索引 |",
+        "| response_matrix.md | 招标条款、评分项、响应策略和 evidence_id 对照 |",
+        "| evidence_trace.json | evidence_id 到来源文件、位置、资产和材料包的机器可读追溯 |",
+        "| plan.md | 解析出的硬性条款、技术要求、评分项和材料包分工 |",
+        "",
+        "## 交付边界",
+        "",
+        "- 所有高风险事实应以 response_matrix.md 和 evidence_trace.json 中的 evidence_id 为准；未列入证据链的内容不得在正式稿中写成已提供。",
+        "- 当前 handoff 仅汇总真实 review 结果，不替代商务、法务、签章和装订复核。",
+    ]
     return "\n".join(lines) + "\n"
 
 

@@ -437,3 +437,31 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a compact project-level export/readiness handoff artifact that summarizes remaining human actions, material groups, and evidence gaps for commercial trial users.
+
+## 2026-05-08 Round 17
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `63/63`, project `55`, evidence trace length `70`.
+- Lowest item: review, draft, trace, and project readiness were all available, but there was no compact project-level handoff artifact for commercial trial users to review remaining human actions, material groups, evidence gaps, and artifact purposes in one place.
+
+### Changes
+- Added `handoff.md` generation during review, built entirely from the real review payload and project metadata.
+- Included trial readiness snapshot, remaining human actions, material-package handoff, evidence gaps, artifact map, and evidence-boundary notes in `handoff.md`.
+- Exposed `handoff_artifact: handoff.md` in the review API payload.
+- Added `handoff.md` to required demo artifacts and tightened `eval_bid_assistant.py` from 63 to 69 checks.
+- Updated `/bid` artifact ordering and review workflow so running Review fetches `handoff.md` as the selected artifact while keeping demo execution opening `draft.md`.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/store/bidding/index.ts`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `69/69`, project `57`, evidence trace length `70`.
+- Artifact spot check: project `57` `handoff.md` shows stage `reviewed`, `## 证据缺口`, `## Artifact Map`, and the evidence boundary note that unsupported content must not be written as provided.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: improve draft section polish by adding a dedicated commercial quotation/contract response section that separates报价、付款、保证金 and invoice commitments from the generic商务偏离表.
