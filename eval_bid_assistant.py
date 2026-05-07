@@ -436,6 +436,7 @@ def main() -> int:
     frontend_bid_route_storage_capture = read_repo_text("frontend/scripts/bidding/captureBidRouteStorageState.mts")
     frontend_bid_route_runbook = read_repo_text("frontend/scripts/bidding/README.md")
     frontend_bid_route_secret_check = read_repo_text("frontend/scripts/bidding/checkBidRouteSmokeSecrets.mts")
+    frontend_bid_route_secret_test = read_repo_text("frontend/scripts/bidding/testBidRouteSmokeSecrets.mts")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
@@ -654,6 +655,32 @@ def main() -> int:
                 ]
             )
             and "check:bid-smoke-secrets" in frontend_package_json,
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route smoke secret guard has failure fixture",
+            all(
+                token in frontend_bid_route_secret_check
+                for token in [
+                    "BID_ROUTE_SMOKE_SECRET_CHECK_TARGETS",
+                    "path.delimiter",
+                    "targetFilesFromEnv",
+                ]
+            )
+            and all(
+                token in frontend_bid_route_secret_test
+                for token in [
+                    "mkdtempSync",
+                    "runtime-generated",
+                    "BID_ROUTE_SMOKE_SECRET_TEST_PASS",
+                    "BID_ROUTE_SMOKE_SECRET_CHECK_FAIL",
+                    "<redacted>",
+                    "credentialValue",
+                    "rmSync",
+                ]
+            )
+            and "test:bid-smoke-secrets" in frontend_package_json,
         )
     )
     checks.append(

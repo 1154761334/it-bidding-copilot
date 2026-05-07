@@ -878,3 +878,38 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a small fixture-based check for the guard's failure mode without storing any credential-like literal directly in tracked files.
+
+## 2026-05-08 Round 32
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `96/96`, project `120`, evidence trace length `94`.
+- Lowest item: the bidding smoke secret guard had a passing static scan, but no failure-path self-test proving that credential-shaped findings are detected and redacted without storing a credential-like fixture in tracked files.
+
+### Changes
+- Extended `frontend/scripts/bidding/checkBidRouteSmokeSecrets.mts` with `BID_ROUTE_SMOKE_SECRET_CHECK_TARGETS` so tests can scan runtime-generated fixtures outside the repo.
+- Added `frontend/scripts/bidding/testBidRouteSmokeSecrets.mts`, which creates a temporary credential-shaped fixture at runtime, expects the guard to fail, verifies the failure status, and asserts the generated value is not present in output.
+- Added the `test:bid-smoke-secrets` package script.
+- Tightened `eval_bid_assistant.py` from 96 to 97 checks by requiring the target override, runtime fixture test, redaction assertion, cleanup, and package entrypoint.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `97/97`, project `122`, evidence trace length `94`.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, emitted `BID_ROUTE_SMOKE_SECRET_CHECK_PASS`.
+- `cd frontend && pnpm run test:bid-smoke-secrets`: PASS, emitted `BID_ROUTE_SMOKE_SECRET_TEST_PASS`.
+- `cd frontend && pnpm exec eslint scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidRouteSmokeSecrets.mts scripts/bidding/captureBidRouteStorageState.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidRouteSmokeSecrets.mts`: PASS.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm run smoke:bid-route`: PASS against `http://127.0.0.1:9876/bid`, API status `ok`, evidence count `253`, auth mode `not_required`; temporary FastAPI and SPA dev servers were stopped after the smoke.
+
+### Artifacts
+- `pnpm run test:bid-smoke-secrets` now validates the guard's failure mode using a runtime-only fixture and redacted output.
+- `BID_ROUTE_SMOKE_SECRET_CHECK_TARGETS` provides a safe test path for future CI fixtures without expanding the default repo scan surface.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a single package-level acceptance preset that chains `check:bid-smoke-secrets`, `test:bid-smoke-secrets`, and the route smoke so CI can invoke the bidding smoke gate consistently.
