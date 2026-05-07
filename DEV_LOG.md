@@ -1234,3 +1234,43 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a compact acceptance manifest that records the bid smoke preflight sub-artifacts and expected status names so CI logs can be audited without reading the full runbook.
+
+## 2026-05-08 Round 42
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `106/106`, project `165`, evidence trace length `94`.
+- Lowest item: preflight now covered multiple CI-safe sub-artifacts, but CI logs still required reading the runbook to audit the expected artifact/status contract.
+
+### Changes
+- Added `frontend/scripts/bidding/bidSmokeAcceptanceManifest.json`, a compact service-free manifest for `acceptance:bid-smoke:preflight` that records each sub-artifact command, source, and expected terminal status.
+- Added `frontend/scripts/bidding/testBidSmokeAcceptanceManifest.mts`, which validates manifest schema, status coverage, source emissions, package script wiring, preflight inclusion, and runbook discoverability.
+- Added `test:bid-smoke-acceptance-manifest` to `frontend/package.json` and wired it into both `acceptance:bid-smoke` and `acceptance:bid-smoke:preflight`.
+- Updated the bid smoke runbook and command matrix to document the compact manifest artifact and `BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS`.
+- Expanded the bid smoke secret guard scan surface to include the manifest and manifest self-test.
+- Tightened `eval_bid_assistant.py` from 106 to 107 checks by requiring the manifest file, self-test, package/runbook wiring, status coverage, and secret guard coverage.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS` with 9 recorded statuses.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS, now includes `test:bid-smoke-acceptance-manifest` in documented/package command coverage.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, scans the manifest and manifest self-test.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS` and `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm exec eslint scripts/bidding/testBidSmokeAcceptanceManifest.mts scripts/bidding/testBidRouteProductionDocsDrift.mts scripts/bidding/testBidRouteProductionDocs.mts scripts/bidding/testBidRouteProductionDocsFailure.mts scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidSmokeCommandMatrix.mts scripts/bidding/runBidSmokeAcceptance.mts scripts/bidding/testBidSmokeAcceptanceRunner.mts scripts/bidding/testBidRouteSmokeSecrets.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `107/107`, project `166`, evidence trace length `94`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/README.md scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/bidSmokeAcceptanceManifest.json scripts/bidding/testBidSmokeAcceptanceManifest.mts scripts/bidding/testBidSmokeCommandMatrix.mts`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `scripts/bidding/bidSmokeAcceptanceManifest.json` now provides a compact CI audit artifact for the bid smoke preflight gate.
+- `pnpm run test:bid-smoke-acceptance-manifest` now proves the manifest, source scripts, package scripts, and runbook stay synchronized.
+- `acceptance:bid-smoke:preflight` now emits a manifest-specific status before validating production docs, drift fixtures, and port readiness without starting services.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a CI-safe manifest drift fixture that mutates manifest statuses/commands and proves the manifest self-test fails before preflight.

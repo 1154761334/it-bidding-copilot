@@ -438,6 +438,8 @@ def main() -> int:
     frontend_bid_route_secret_check = read_repo_text("frontend/scripts/bidding/checkBidRouteSmokeSecrets.mts")
     frontend_bid_route_secret_test = read_repo_text("frontend/scripts/bidding/testBidRouteSmokeSecrets.mts")
     frontend_bid_route_acceptance_runner = read_repo_text("frontend/scripts/bidding/runBidSmokeAcceptance.mts")
+    frontend_bid_route_acceptance_manifest = read_repo_text("frontend/scripts/bidding/bidSmokeAcceptanceManifest.json")
+    frontend_bid_route_acceptance_manifest_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceManifest.mts")
     frontend_bid_route_acceptance_runner_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceRunner.mts")
     frontend_bid_route_command_matrix_test = read_repo_text("frontend/scripts/bidding/testBidSmokeCommandMatrix.mts")
     frontend_bid_route_production_docs_test = read_repo_text("frontend/scripts/bidding/testBidRouteProductionDocs.mts")
@@ -656,10 +658,12 @@ def main() -> int:
                     "BID_ROUTE_SMOKE_SECRET_CHECK_PASS",
                     "BID_ROUTE_SMOKE_SECRET_CHECK_FAIL",
                     "credential literal",
+                    "bidSmokeAcceptanceManifest.json",
                     "runBidSmokeAcceptance.mts",
                     "testBidRouteProductionDocsDrift.mts",
                     "testBidRouteProductionDocs.mts",
                     "testBidRouteProductionDocsFailure.mts",
+                    "testBidSmokeAcceptanceManifest.mts",
                     "testBidSmokeAcceptanceRunner.mts",
                     "testBidSmokeCommandMatrix.mts",
                     "redact",
@@ -702,7 +706,7 @@ def main() -> int:
                 token in frontend_package_json
                 for token in [
                     "acceptance:bid-smoke",
-                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-route-production-docs && pnpm run test:bid-route-production-docs-failure && pnpm run test:bid-route-production-docs-drift && pnpm run smoke:bid-route",
+                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-smoke-acceptance-manifest && pnpm run test:bid-route-production-docs && pnpm run test:bid-route-production-docs-failure && pnpm run test:bid-route-production-docs-drift && pnpm run smoke:bid-route",
                 ]
             )
             and all(
@@ -714,6 +718,7 @@ def main() -> int:
                     "runtime fixture self-test",
                     "local runner preflight self-test",
                     "command matrix self-test",
+                    "compact acceptance manifest self-test",
                     "production-route docs/storage-state guard",
                     "runtime failure fixture",
                     "path override drift fixture",
@@ -793,6 +798,40 @@ def main() -> int:
             )
             and "test:bid-smoke-command-matrix" in frontend_package_json
             and "pnpm run test:bid-smoke-command-matrix" in frontend_bid_route_runbook,
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid smoke acceptance manifest is executable",
+            all(
+                token in frontend_bid_route_acceptance_manifest
+                for token in [
+                    '"schema_version": 1',
+                    '"gate": "acceptance:bid-smoke:preflight"',
+                    '"mode": "service-free"',
+                    '"BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS"',
+                    '"BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS"',
+                    '"BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS"',
+                    '"scripts/bidding/runBidSmokeAcceptance.mts"',
+                ]
+            )
+            and all(
+                token in frontend_bid_route_acceptance_manifest_test
+                for token in [
+                    "MANIFEST_PATH",
+                    "sub_artifacts",
+                    "packageScriptName",
+                    "BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS",
+                    "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
+                    "readme.includes(MANIFEST_PATH)",
+                    "sourceText.includes(artifact.status)",
+                ]
+            )
+            and "test:bid-smoke-acceptance-manifest" in frontend_package_json
+            and "pnpm run test:bid-smoke-acceptance-manifest" in frontend_bid_route_runbook
+            and "scripts/bidding/bidSmokeAcceptanceManifest.json" in frontend_bid_route_runbook
+            and "bidSmokeAcceptanceManifest.json" in frontend_bid_route_secret_check
+            and "testBidSmokeAcceptanceManifest.mts" in frontend_bid_route_secret_check,
         )
     )
     checks.append(
