@@ -404,6 +404,7 @@ def main() -> int:
     frontend_store = read_repo_text("frontend/src/store/bidding/index.ts")
     frontend_workbench = read_repo_text("frontend/src/features/Bidding/BiddingWorkbench.tsx")
     frontend_draft_tab = read_repo_text("frontend/src/features/Bidding/BiddingDraftTab.tsx")
+    frontend_draft_tab_test = read_repo_text("frontend/src/features/Bidding/BiddingDraftTab.test.tsx")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
     frontend_review_tab = read_repo_text("frontend/src/features/Bidding/BiddingReviewTab.tsx")
     checks.append(check("frontend /bid route wired", "path: 'bid'" in frontend_route and "BiddingWorkbench" in frontend_route))
@@ -499,6 +500,22 @@ def main() -> int:
                     "handleSelectMaterialPackage",
                     "CONTRACT_EXECUTION_GROUP_KEY",
                     "Open trace",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
+            "frontend draft material package jump has render smoke test",
+            all(
+                token in frontend_draft_tab_test
+                for token in [
+                    "BiddingDraftTab",
+                    "Artifact Material Packages",
+                    "合同履约材料",
+                    "fireEvent.click",
+                    "Selected Evidence",
+                    "EVID-131",
                 ]
             ),
         )

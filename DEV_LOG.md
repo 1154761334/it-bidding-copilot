@@ -633,3 +633,29 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a focused `/bid` smoke test or Playwright check for the Draft material-package strip so the UI behavior is verified by rendering, not only by static source checks and production build.
+
+## 2026-05-08 Round 24
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `87/87`, project `80`, evidence trace length `94`.
+- Lowest item: the Draft material-package strip had static source/evaluator coverage and production build coverage, but no rendering-level smoke test proving the `合同履约材料` package button opens the matching evidence trace.
+
+### Changes
+- Added a focused Testing Library/Vitest component test for `BiddingDraftTab`.
+- The test renders a Draft artifact with the `Artifact Material Packages` strip, verifies the `合同履约材料` row/evidence/trace/missing counters, clicks the package button, and confirms `Selected Evidence` opens the matching `EVID-131` trace record.
+- Tightened `eval_bid_assistant.py` from 87 to 88 checks by requiring the Draft material-package render smoke test to exist.
+
+### Verification
+- `cd frontend && pnpm exec vitest run src/features/Bidding/BiddingDraftTab.test.tsx`: PASS, 1 test.
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingDraftTab.tsx src/features/Bidding/BiddingDraftTab.test.tsx`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `88/88`, project `81`, evidence trace length `94`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add an end-to-end `/bid` rendering smoke against the running frontend/backend path, so the route-level store integration for artifact package jumps is covered beyond the isolated component test.
