@@ -1155,3 +1155,43 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a CI-safe failure-path fixture for the production docs guard so it proves secret-bearing production assignments are rejected without writing any real credentials.
+
+## 2026-05-08 Round 40
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `104/104`, project `157`, evidence trace length `94`.
+- Lowest item: the production docs/storage-state guard had a positive CI-safe check, but no failure fixture proved that secret-bearing production command assignments were rejected without storing any real credential values.
+
+### Changes
+- Added path override support to `frontend/scripts/bidding/testBidRouteProductionDocs.mts` so runtime fixtures can point the guard at a temporary README while keeping repo docs untouched.
+- Added `frontend/scripts/bidding/testBidRouteProductionDocsFailure.mts`, which generates a temporary README, injects a runtime-only sensitive production assignment, asserts the production docs guard rejects it, and verifies the generated value does not appear in guard output.
+- Added `test:bid-route-production-docs-failure` to `frontend/package.json` and wired it into both `acceptance:bid-smoke` and `acceptance:bid-smoke:preflight`.
+- Updated the bid smoke runbook and command matrix to advertise `BID_ROUTE_PRODUCTION_DOCS_FAILURE_TEST_PASS`.
+- Expanded the bid smoke secret guard scan surface to include the new failure fixture.
+- Tightened `eval_bid_assistant.py` from 104 to 105 checks by requiring the failure fixture, package/runbook wiring, and secret guard coverage.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run test:bid-route-production-docs`: PASS, emitted `BID_ROUTE_PRODUCTION_DOCS_TEST_PASS`.
+- `cd frontend && pnpm run test:bid-route-production-docs-failure`: PASS, emitted `BID_ROUTE_PRODUCTION_DOCS_FAILURE_TEST_PASS` and did not leak the generated runtime fixture value.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS, now includes `test:bid-route-production-docs-failure` in documented/package command coverage.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, scans the production docs failure fixture.
+- `cd frontend && pnpm exec eslint scripts/bidding/testBidRouteProductionDocs.mts scripts/bidding/testBidRouteProductionDocsFailure.mts scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidSmokeCommandMatrix.mts scripts/bidding/runBidSmokeAcceptance.mts scripts/bidding/testBidSmokeAcceptanceRunner.mts scripts/bidding/testBidRouteSmokeSecrets.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `105/105`, project `158`, evidence trace length `94`.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_ROUTE_PRODUCTION_DOCS_FAILURE_TEST_PASS` and `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/README.md scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidRouteProductionDocs.mts scripts/bidding/testBidRouteProductionDocsFailure.mts scripts/bidding/testBidSmokeCommandMatrix.mts`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_ROUTE_PRODUCTION_DOCS_FAILURE_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `pnpm run test:bid-route-production-docs-failure` now provides a CI-safe negative artifact for production route docs hygiene.
+- `acceptance:bid-smoke:preflight` now validates both the positive and negative production route docs/storage-state paths without starting services or writing real credentials.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a CI-safe runbook fixture for production docs guard path overrides so capture/smoke/gitignore drift can be tested without touching the real repo files.

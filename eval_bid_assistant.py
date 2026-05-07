@@ -441,6 +441,7 @@ def main() -> int:
     frontend_bid_route_acceptance_runner_test = read_repo_text("frontend/scripts/bidding/testBidSmokeAcceptanceRunner.mts")
     frontend_bid_route_command_matrix_test = read_repo_text("frontend/scripts/bidding/testBidSmokeCommandMatrix.mts")
     frontend_bid_route_production_docs_test = read_repo_text("frontend/scripts/bidding/testBidRouteProductionDocs.mts")
+    frontend_bid_route_production_docs_failure_test = read_repo_text("frontend/scripts/bidding/testBidRouteProductionDocsFailure.mts")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
@@ -656,6 +657,7 @@ def main() -> int:
                     "credential literal",
                     "runBidSmokeAcceptance.mts",
                     "testBidRouteProductionDocs.mts",
+                    "testBidRouteProductionDocsFailure.mts",
                     "testBidSmokeAcceptanceRunner.mts",
                     "testBidSmokeCommandMatrix.mts",
                     "redact",
@@ -698,7 +700,7 @@ def main() -> int:
                 token in frontend_package_json
                 for token in [
                     "acceptance:bid-smoke",
-                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-route-production-docs && pnpm run smoke:bid-route",
+                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run test:bid-smoke-acceptance-runner && pnpm run test:bid-smoke-command-matrix && pnpm run test:bid-route-production-docs && pnpm run test:bid-route-production-docs-failure && pnpm run smoke:bid-route",
                 ]
             )
             and all(
@@ -711,6 +713,7 @@ def main() -> int:
                     "local runner preflight self-test",
                     "command matrix self-test",
                     "production-route docs/storage-state guard",
+                    "runtime failure fixture",
                     "real `/bid` route smoke",
                 ]
             ),
@@ -861,6 +864,7 @@ def main() -> int:
                     "commandAssignments",
                     "lists environment variable names only",
                     "Production environment list must contain names only",
+                    "BID_ROUTE_PRODUCTION_DOCS_README",
                     "BID_ROUTE_PRODUCTION_DOCS_TEST_PASS",
                 ]
             )
@@ -870,6 +874,29 @@ def main() -> int:
             and ".auth/bid-route-storage-state.json" in frontend_bid_route_storage_capture
             and "BID_ROUTE_PRODUCTION_DOCS_TEST_PASS" in frontend_bid_route_runbook
             and "pnpm run test:bid-route-production-docs" in frontend_package_json,
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route production docs guard has failure fixture",
+            all(
+                token in frontend_bid_route_production_docs_failure_test
+                for token in [
+                    "mkdtempSync",
+                    "SAFE_STORAGE_COMMAND",
+                    "BID_ROUTE_PRODUCTION_DOCS_README",
+                    "sensitiveEnvName",
+                    "fixtureValue",
+                    "Production command example assigns",
+                    "Generated production docs fixture value leaked into guard output",
+                    "BID_ROUTE_PRODUCTION_DOCS_FAILURE_TEST_PASS",
+                    "rmSync",
+                ]
+            )
+            and "test:bid-route-production-docs-failure" in frontend_package_json
+            and "pnpm run test:bid-route-production-docs-failure" in frontend_bid_route_runbook
+            and "BID_ROUTE_PRODUCTION_DOCS_FAILURE_TEST_PASS" in frontend_bid_route_runbook
+            and "testBidRouteProductionDocsFailure.mts" in frontend_bid_route_secret_check,
         )
     )
     checks.append(
