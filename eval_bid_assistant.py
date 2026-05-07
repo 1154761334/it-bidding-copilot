@@ -222,6 +222,7 @@ def main() -> int:
         )
     )
     checks.append(check("frontend evidence panel shows asset paths", all(token in frontend_draft_tab for token in ["asset_paths", "Asset paths"])))
+    checks.append(check("frontend review tab shows attachment readiness", all(token in frontend_review_tab for token in ["attachment_readiness", "Attachment Readiness", "needs_page_hint"])))
     checks.append(check("frontend review tab shows risk buckets", all(token in frontend_review_tab for token in ["risk_buckets", "Risk Buckets", "bucket.status"])))
 
     passed = sum(1 for item in checks if item["ok"])

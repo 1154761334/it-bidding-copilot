@@ -241,3 +241,29 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: expose review attachment readiness and scoring readiness more clearly in the `/bid` Review tab instead of only inside Markdown artifacts.
+
+## 2026-05-08 Round 10
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `43/43`, project `27`, evidence trace length `70`.
+- Lowest item: the backend review payload already contained attachment readiness data, but `/bid` Review tab only showed coverage, risk buckets, and findings. Reviewers had to open `review.md` to see bidder-side readiness counts and missing page/asset evidence ids.
+
+### Changes
+- Added an Attachment Readiness summary to `/bid` Review tab.
+- Displayed bidder-side ready count, missing page/asset count, and tender reference count as compact badges.
+- Listed the first missing page/asset evidence records directly in the Review tab so users can act without opening Markdown.
+- Tightened `eval_bid_assistant.py` from 43 to 44 checks covering frontend attachment-readiness rendering.
+
+### Verification
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingReviewTab.tsx`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `44/44`, project `29`, evidence trace length `70`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a compact scoring readiness summary to the Review tab once scoring readiness is exposed in the review API payload.
