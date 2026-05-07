@@ -1274,3 +1274,44 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a CI-safe manifest drift fixture that mutates manifest statuses/commands and proves the manifest self-test fails before preflight.
+
+## 2026-05-08 Round 43
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `107/107`, project `169`, evidence trace length `94`.
+- Lowest item: the compact acceptance manifest had a positive self-test, but no CI-safe negative fixture proved status/command drift would fail before the port preflight stage.
+
+### Changes
+- Added path override support to `frontend/scripts/bidding/testBidSmokeAcceptanceManifest.mts` so runtime fixtures can validate temporary manifest files without touching the real manifest.
+- Added `frontend/scripts/bidding/testBidSmokeAcceptanceManifestDrift.mts`, which copies the manifest into a temporary file, proves the override fixture passes, then verifies status drift and command drift fail without emitting the manifest pass status.
+- Verified in the drift fixture that `test:bid-smoke-acceptance-manifest` runs before the `BID_ACCEPTANCE_PREFLIGHT_ONLY=1` port guard in `acceptance:bid-smoke:preflight`.
+- Added `test:bid-smoke-acceptance-manifest-drift` to `frontend/package.json` and wired it into both `acceptance:bid-smoke` and `acceptance:bid-smoke:preflight`.
+- Updated the bid smoke runbook, command matrix, acceptance manifest, and secret guard scan surface to include `BID_SMOKE_ACCEPTANCE_MANIFEST_DRIFT_TEST_PASS`.
+- Tightened `eval_bid_assistant.py` from 107 to 108 checks by requiring the drift fixture, package/runbook wiring, manifest status coverage, preflight ordering guard, and secret guard coverage.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS` with 10 recorded statuses.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest-drift`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_DRIFT_TEST_PASS` for `status` and `command` drift cases.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS, now includes `test:bid-smoke-acceptance-manifest-drift` in documented/package command coverage.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, scans the manifest drift fixture.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_DRIFT_TEST_PASS` before `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm exec eslint scripts/bidding/testBidSmokeAcceptanceManifest.mts scripts/bidding/testBidSmokeAcceptanceManifestDrift.mts scripts/bidding/testBidRouteProductionDocsDrift.mts scripts/bidding/testBidRouteProductionDocs.mts scripts/bidding/testBidRouteProductionDocsFailure.mts scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/testBidSmokeCommandMatrix.mts scripts/bidding/runBidSmokeAcceptance.mts scripts/bidding/testBidSmokeAcceptanceRunner.mts scripts/bidding/testBidRouteSmokeSecrets.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `108/108`, project `170`, evidence trace length `94`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/README.md scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/bidSmokeAcceptanceManifest.json scripts/bidding/testBidSmokeAcceptanceManifest.mts scripts/bidding/testBidSmokeAcceptanceManifestDrift.mts scripts/bidding/testBidSmokeCommandMatrix.mts`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_SMOKE_ACCEPTANCE_MANIFEST_DRIFT_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `pnpm run test:bid-smoke-acceptance-manifest-drift` now provides a CI-safe negative artifact for manifest status/command drift.
+- `scripts/bidding/bidSmokeAcceptanceManifest.json` now records 10 preflight sub-artifact statuses including the manifest drift fixture.
+- `acceptance:bid-smoke:preflight` now proves manifest drift handling before running the final port preflight guard.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a service-free snapshot test for the `/bid` runbook/manifest artifacts that exports a single CI summary JSON for preflight consumers.
