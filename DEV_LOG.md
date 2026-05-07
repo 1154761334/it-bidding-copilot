@@ -215,3 +215,29 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: improve scoring-point support in `draft.md` by turning score rows into a score-by-score response checklist with evidence readiness and missing manual signoff.
+
+## 2026-05-08 Round 9
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `42/42`, project `25`, evidence trace length `70`.
+- Lowest item: `draft.md` scoring section still summarized each scoring row as a short evidence-id line, so reviewers could not directly see response points, readiness, and manual signoff items for scoring materials.
+
+### Changes
+- Replaced the scoring-point bullets in `draft.md` section 3.3 with a score-by-score checklist table.
+- Added deterministic scoring response notes for体系认证、类似案例、整体架构、技术指标响应程度 and 项目实施/团队 scoring rows.
+- Added row-level evidence readiness for scoring rows, distinguishing ready bidder-side evidence, missing page/attachment numbers, no direct evidence, and tender-only references.
+- Added manual review prompts for certificate validity, contract amount and dates, architecture consistency, △ screenshot/page alignment, and team certificate/social-security/support materials.
+- Tightened `eval_bid_assistant.py` from 42 to 43 checks covering the scoring response checklist.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `43/43`, project `27`, evidence trace length `70`.
+- Artifact spot check: `draft.md` section 3.3 now includes columns `评分项`, `响应要点`, `证据定位`, `就绪状态`, and `人工复核`, with certificate validity, contract amount, and team certificate checks.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: expose review attachment readiness and scoring readiness more clearly in the `/bid` Review tab instead of only inside Markdown artifacts.

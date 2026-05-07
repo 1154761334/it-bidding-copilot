@@ -522,9 +522,14 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     lines += [
         "",
         "### 3.3 评分点支撑",
+        "",
+        "| 评分项 | 响应要点 | 证据定位 | 就绪状态 | 人工复核 |",
+        "|---|---|---|---|---|",
     ]
     for row in scoring:
-        lines.append(f"- {_plain_requirement(row['requirement'])}：{_ids(row) or '缺少直接证据，列入补材料清单'}。")
+        lines.append(
+            f"| {_md_cell(row['requirement'])} | {_md_cell(_scoring_response_note(row['requirement']))} | {_md_cell(_evidence_refs(row) or '缺少直接证据，列入补材料清单')} | {_md_cell(_row_readiness(row))} | {_md_cell(_scoring_manual_check(row['requirement']))} |"
+        )
 
     lines += [
         "",
@@ -619,6 +624,47 @@ def _implementation_note(requirement: str) -> str:
         if any(keyword in text for keyword in keywords):
             return note
     return "围绕该技术指标拆分管理界面、配置流程、截图证明和附件位置，确保每项能力均能回链到响应矩阵中的 evidence_id。"
+
+
+def _scoring_response_note(requirement: str) -> str:
+    text = _plain_requirement(requirement)
+    if "体系认证" in text or "ISO27001" in text:
+        return "按证书名称、认证范围、有效期和投标主体一致性整理资信证明，放入商务资信附件。"
+    if "类似案例" in text:
+        return "按项目名称、合同金额、建设内容、验收或合同关键页整理案例清单，优先选择与私有云建设匹配的业绩。"
+    if "整体架构" in text:
+        return "围绕先进性、高可用性、可扩展性组织架构图、资源池设计、容灾与运维说明，并回链到方案章节。"
+    if "技术指标" in text:
+        return "将技术偏离表、功能截图和响应矩阵逐项交叉引用，确保带△指标无负偏离且可快速定位。"
+    if "实施" in text or "团队" in text or "项目经理" in text:
+        return "按项目经理、实施团队、原厂支持、PMP/高级软考和社保证明整理人员材料，形成团队得分附件组。"
+    return "按评分细则拆分响应要点、证明材料、附件页码和人工复核事项。"
+
+
+def _scoring_manual_check(requirement: str) -> str:
+    text = _plain_requirement(requirement)
+    if "体系认证" in text or "ISO27001" in text:
+        return "复核证书有效期、认证范围、主体名称和盖章页。"
+    if "类似案例" in text:
+        return "复核合同金额、签署日期、建设内容、验收材料和脱敏页码。"
+    if "整体架构" in text:
+        return "复核架构图、容量/高可用描述和讲标口径一致。"
+    if "技术指标" in text:
+        return "复核每个△指标的截图编号、页码和偏离表一致性。"
+    if "实施" in text or "团队" in text or "项目经理" in text:
+        return "复核团队人员证书、社保、授权和原厂实施承诺。"
+    return "复核材料真实性、页码和签章状态。"
+
+
+def _row_readiness(row: dict[str, Any]) -> str:
+    if not row["evidence"]:
+        return "缺少直接证据"
+    bidder_items = [item for item in row["evidence"] if not _is_tender_source(str(item.get("source_doc") or ""))]
+    if not bidder_items:
+        return "仅招标依据，需补投标人材料"
+    if any(_binding_status(item) == "需回填页码" for item in bidder_items):
+        return "需回填页码/附件编号"
+    return "可定位"
 
 
 def _page_or_asset_hint(item: dict[str, Any]) -> str:
