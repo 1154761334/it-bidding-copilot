@@ -913,3 +913,36 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a single package-level acceptance preset that chains `check:bid-smoke-secrets`, `test:bid-smoke-secrets`, and the route smoke so CI can invoke the bidding smoke gate consistently.
+
+## 2026-05-08 Round 33
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `97/97`, project `125`, evidence trace length `94`.
+- Lowest item: bid smoke had separate package scripts for the secret guard, failure fixture, and route smoke, but no single package-level acceptance preset that CI or operators could invoke consistently once FastAPI and Vite are running.
+
+### Changes
+- Added `acceptance:bid-smoke` to `frontend/package.json`, chaining `check:bid-smoke-secrets`, `test:bid-smoke-secrets`, and `smoke:bid-route`.
+- Updated `frontend/scripts/bidding/README.md` to document the full local smoke gate and its requirement that FastAPI and Vite already be running.
+- Tightened `eval_bid_assistant.py` from 97 to 98 checks by requiring the package preset and runbook text.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `98/98`, project `126`, evidence trace length `94`.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/README.md`: PASS.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, emitted `BID_ROUTE_SMOKE_SECRET_CHECK_PASS`.
+- `cd frontend && pnpm run test:bid-smoke-secrets`: PASS, emitted `BID_ROUTE_SMOKE_SECRET_TEST_PASS`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm run acceptance:bid-smoke`: PASS against `http://127.0.0.1:9876/bid`, API status `ok`, evidence count `253`, auth mode `not_required`; temporary FastAPI and SPA dev servers were stopped after the smoke.
+
+### Artifacts
+- `pnpm run acceptance:bid-smoke` is now the single local acceptance command for the non-secret guard, runtime fixture self-test, and real `/bid` route smoke.
+- The runbook now documents the full local gate while continuing to list environment names only for production-route auth setup.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: reduce route-smoke setup friction by adding a lightweight orchestration helper that starts temporary FastAPI and Vite, runs `acceptance:bid-smoke`, and reliably tears both processes down.

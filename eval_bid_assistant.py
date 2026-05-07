@@ -685,6 +685,28 @@ def main() -> int:
     )
     checks.append(
         check(
+            "frontend bid route smoke acceptance preset is standardized",
+            all(
+                token in frontend_package_json
+                for token in [
+                    "acceptance:bid-smoke",
+                    "pnpm run check:bid-smoke-secrets && pnpm run test:bid-smoke-secrets && pnpm run smoke:bid-route",
+                ]
+            )
+            and all(
+                token in frontend_bid_route_runbook
+                for token in [
+                    "pnpm run acceptance:bid-smoke",
+                    "full local smoke gate",
+                    "non-secret static guard",
+                    "runtime fixture self-test",
+                    "real `/bid` route smoke",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
             "frontend evidence tab has material group presets",
             all(
                 token in frontend_evidence_tab
