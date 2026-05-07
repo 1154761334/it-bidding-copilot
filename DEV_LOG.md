@@ -1485,3 +1485,49 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a manifest/order schema fixture that mutates terminal artifact placement or status to prove the preflight port guard cannot be omitted, duplicated, or moved away from the terminal position.
+
+## 2026-05-08 Round 48
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `112/112`, project `196`, evidence trace length `94`.
+- Lowest item: the order guard derived service-free commands from the manifest, but it only had positive terminal-artifact assertions. No negative fixture proved the preflight port guard could not be omitted, duplicated, or moved away from the terminal manifest position.
+
+### Changes
+- Added `PREFLIGHT_TERMINAL_ARTIFACT_ID` to `frontend/scripts/bidding/testBidSmokePreflightOrder.mts` so the manifest terminal artifact must be the explicit `preflight_port_guard`.
+- Tightened terminal manifest validation to require exactly one artifact with `expected_terminal_status`, require the terminal artifact id to be `preflight_port_guard`, require its command to run the port preflight marker, and require it to be the last manifest artifact.
+- Added service-free negative fixtures for `terminal_artifact_omitted`, `terminal_artifact_duplicated`, and `terminal_artifact_moved`.
+- Updated the preflight order artifact JSON with `terminal_artifact_cases`.
+- Updated the bid smoke runbook to document that the terminal port guard cannot be omitted, duplicated, or moved away from the end of the manifest.
+- Tightened `eval_bid_assistant.py` from 112 to 113 checks by requiring the terminal-artifact guard implementation, negative fixture labels, and runbook wording.
+
+### Verification
+- `cd backend && venv/bin/python -m py_compile ../eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec prettier --write scripts/bidding/README.md scripts/bidding/testBidSmokePreflightOrder.mts`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-preflight-order`: PASS, emitted `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS` with `terminal_artifact_omitted`, `terminal_artifact_duplicated`, and `terminal_artifact_moved` cases.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `113/113`, project `197`, evidence trace length `94`.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary-failure`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `terminal_artifact_cases` before `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm exec eslint ...`: PASS for the bid smoke scripts touched and referenced in this round.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints warning-level output, but exits 0.
+- `cd frontend && pnpm exec prettier --check ...`: PASS for package/runbook/manifest and touched bid smoke scripts.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`.
+- `pgrep -af '[u]vicorn|[v]ite|[n]ext' || true`: PASS, no matching processes remained after local acceptance.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- Final `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `113/113`, project `200`, evidence trace length `94`.
+
+### Artifacts
+- `pnpm run test:bid-smoke-preflight-order` now emits `terminal_artifact_cases` for omitted, duplicated, and moved terminal port-guard manifest drift.
+- The manifest-derived order artifact now proves the terminal preflight port guard is unique, explicit, and last.
+- `acceptance:bid-smoke:preflight` now checks terminal manifest drift before production docs fixtures and final port readiness.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: make the preflight summary JSON expose terminal artifact id/source/command separately so CI consumers can verify the terminal port guard without parsing the full sub-artifact list.

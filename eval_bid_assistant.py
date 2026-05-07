@@ -991,6 +991,28 @@ def main() -> int:
     )
     checks.append(
         check(
+            "frontend bid smoke preflight order guards terminal artifact",
+            all(
+                token in frontend_bid_route_preflight_order_test
+                for token in [
+                    "PREFLIGHT_TERMINAL_ARTIFACT_ID",
+                    "Manifest terminal artifact must be unique.",
+                    "Manifest terminal artifact must be the preflight port guard.",
+                    "Manifest terminal artifact must run the port preflight guard.",
+                    "removeArtifact",
+                    "duplicateArtifactAfter",
+                    "terminal_artifact_omitted",
+                    "terminal_artifact_duplicated",
+                    "terminal_artifact_moved",
+                    "terminal_artifact_cases",
+                ]
+            )
+            and "terminal port guard cannot be omitted, duplicated, or moved away from the end of the manifest"
+            in frontend_bid_route_runbook,
+        )
+    )
+    checks.append(
+        check(
             "frontend bid route smoke command matrix is documented",
             all(
                 token in frontend_package_json
