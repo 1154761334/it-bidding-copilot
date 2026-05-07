@@ -659,3 +659,31 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add an end-to-end `/bid` rendering smoke against the running frontend/backend path, so the route-level store integration for artifact package jumps is covered beyond the isolated component test.
+
+## 2026-05-08 Round 25
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `88/88`, project `83`, evidence trace length `94`.
+- Lowest item: `/bid` had a component-level render smoke for the Draft material-package strip, but no route/workbench-level smoke proving the LobeChat SPA route, Zustand store, real Bidding-agent API, generated artifacts, and package trace jump work together.
+
+### Changes
+- Added `frontend/scripts/bidding/smokeBidRoute.mts`, a Playwright smoke that targets the LobeChat SPA `/bid` route, preflights the real Bidding-agent `/health`, clicks `Demo Real Case`, waits for `draft.md` artifact rendering, verifies `Artifact Material Packages`, and opens the `合同履约材料` trace panel.
+- Tightened `eval_bid_assistant.py` from 88 to 89 checks by requiring the real `/bid` route artifact smoke script.
+- Fixed an existing `packages/utils/src/imageToBase64.test.ts` type-check failure by replacing the broad `document.createElement` mock return with a typed implementation that only intercepts `canvas` creation.
+
+### Verification
+- `cd frontend && pnpm exec tsx scripts/bidding/smokeBidRoute.mts`: PASS against `http://127.0.0.1:9876/bid`, API status `ok`, evidence count `253`; temporary FastAPI and SPA dev servers were stopped after the smoke.
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint packages/utils/src/imageToBase64.test.ts scripts/bidding/smokeBidRoute.mts src/features/Bidding/BiddingDraftTab.test.tsx`: PASS.
+- `cd frontend && pnpm exec vitest run src/features/Bidding/BiddingDraftTab.test.tsx`: PASS, 1 test.
+- `cd frontend && pnpm --filter @lobechat/utils exec vitest run src/imageToBase64.test.ts`: PASS, 5 tests.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `89/89`, project `87`, evidence trace length `94`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add an authenticated production-route `/spa/.../bid` e2e smoke once the LobeChat auth/database bootstrap is standardized for local trial runs; current smoke covers the SPA route and real Bidding-agent integration directly.
