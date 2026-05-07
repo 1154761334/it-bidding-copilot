@@ -1015,3 +1015,35 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a short CI/runbook matrix showing which bid smoke command to use for service-free checks, local managed services, and already-running service checks.
+
+## 2026-05-08 Round 36
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `100/100`, project `141`, evidence trace length `94`.
+- Lowest item: bid smoke had the service-free preflight, local managed, and already-running service paths, but operators still had to infer which command matched each scenario.
+
+### Changes
+- Added `acceptance:bid-smoke:preflight` to `frontend/package.json`, chaining the non-secret guard, runtime fixture checks, runner self-test, and service-free preflight mode on CI-safe ports.
+- Added a command matrix to `frontend/scripts/bidding/README.md` covering service-free CI/preflight, local managed services, and already-running FastAPI + Vite checks.
+- Tightened `eval_bid_assistant.py` from 100 to 101 checks by requiring the preflight preset and the runbook command matrix.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `101/101`, project `142`, evidence trace length `94`.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/README.md`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_ROUTE_SMOKE_SECRET_CHECK_PASS`, `BID_ROUTE_SMOKE_SECRET_TEST_PASS`, `BID_SMOKE_ACCEPTANCE_RUNNER_TEST_PASS`, and `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_ROUTE_SMOKE_PASS` and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `pnpm run acceptance:bid-smoke:preflight` is now the service-free CI artifact for bid smoke command readiness.
+- The bid smoke runbook now has an explicit command matrix mapping command, service ownership, and expected artifacts.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a lightweight runbook consistency test that parses the command matrix and verifies every documented `pnpm run acceptance:bid-smoke*` command exists in `package.json`.

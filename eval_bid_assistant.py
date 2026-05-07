@@ -762,6 +762,35 @@ def main() -> int:
     )
     checks.append(
         check(
+            "frontend bid route smoke command matrix is documented",
+            all(
+                token in frontend_package_json
+                for token in [
+                    "acceptance:bid-smoke:preflight",
+                    "BID_ACCEPTANCE_PREFLIGHT_ONLY=1 BID_BACKEND_PORT=18000 BID_FRONTEND_PORT=19876",
+                ]
+            )
+            and all(
+                token in frontend_bid_route_runbook
+                for token in [
+                    "## Command matrix",
+                    "Service-free CI/preflight",
+                    "Local managed services",
+                    "Already-running FastAPI + Vite",
+                    "Services started",
+                    "Expected artifacts",
+                    "pnpm run acceptance:bid-smoke:preflight",
+                    "pnpm run acceptance:bid-smoke:local",
+                    "pnpm run acceptance:bid-smoke",
+                    "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
+                    "BID_SMOKE_ACCEPTANCE_LOCAL_PASS",
+                    "BID_ROUTE_SMOKE_PASS",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
             "frontend evidence tab has material group presets",
             all(
                 token in frontend_evidence_tab
