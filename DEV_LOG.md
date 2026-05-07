@@ -465,3 +465,30 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: improve draft section polish by adding a dedicated commercial quotation/contract response section that separates报价、付款、保证金 and invoice commitments from the generic商务偏离表.
+
+## 2026-05-08 Round 18
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `69/69`, project `59`, evidence trace length `70`.
+- Lowest item: `draft.md` still mixed quotation, payment, guarantee, invoice, and contract commitments into the generic commercial deviation table. Trial users lacked a dedicated commercial contract response section for signature review.
+
+### Changes
+- Added a dedicated `## 二、报价及合同商务响应` section to `draft.md`, separating bid quotation, payment, performance guarantee, invoice, and contract response commitments from the generic deviation table.
+- Added commercial requirement classifiers and response wording helpers, including a priority fix so mixed payment/invoice rows do not fall back to generic quotation wording just because they mention quote attachments.
+- Updated execution metadata from four to five draft sections and added `报价及合同商务响应` to the section list.
+- Renumbered downstream draft sections and evidence index headings to keep the generated artifact structure coherent.
+- Tightened `eval_bid_assistant.py` from 69 to 70 checks covering the new commercial quotation and contract response section.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `70/70`, project `61`, evidence trace length `70`.
+- Artifact spot check: project `61` `draft.md` includes the new commercial response section, separate quotation/payment/guarantee/invoice rows, and the renumbered `## 七、证据索引`; `project.json` exposes five draft sections including `报价及合同商务响应`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a review check that flags commercial response rows backed only by tender-side requirements, so bidder-side quotation or contract-commitment evidence can be backfilled before human signature.

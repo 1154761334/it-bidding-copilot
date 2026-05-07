@@ -586,12 +586,13 @@ def generate_execution(project_id: str, db: Session) -> dict[str, Any]:
     project["execution"] = {
         "response_matrix_rows": len(rows),
         "scoring_table_rows": len(plan["scoring_items"]),
-        "draft_sections": 4,
+        "draft_sections": 5,
         "material_groups": _material_group_summary(rows),
         "missing_materials": [{"name": row["requirement"], "status": "missing_evidence"} for row in rows if not row["evidence"]],
     }
     project["draft_sections"] = [
         {"name": "商务偏离表", "artifact": "draft.md"},
+        {"name": "报价及合同商务响应", "artifact": "draft.md"},
         {"name": "技术偏离表", "artifact": "draft.md"},
         {"name": "技术方案", "artifact": "draft.md"},
         {"name": "售后服务方案", "artifact": "draft.md"},
@@ -642,6 +643,7 @@ def _matrix_markdown(rows: list[dict[str, Any]]) -> str:
 
 def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     hard = [row for row in rows if row["type"] == "hard_clause"]
+    commercial = [row for row in hard if _is_commercial_contract_row(row["requirement"])]
     tech = [row for row in rows if row["type"] == "technical_requirement"]
     scoring = [row for row in rows if row["type"] == "scoring_item"]
 
@@ -664,7 +666,23 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
 
     lines += [
         "",
-        "## 二、技术响应及偏离表",
+        "## 二、报价及合同商务响应",
+        "",
+        "本节仅汇总报价、付款、履约保证金、发票和合同关键商务承诺。正式稿应由商务负责人按开标一览表、报价明细、合同付款条款和保证金承诺逐项签核；未在证据链出现的金额、税率、账户或期限不得擅自填写。",
+        "",
+        "| 商务事项 | 响应口径 | 证据定位 | 签核要求 |",
+        "|---|---|---|---|",
+    ]
+    for row in commercial:
+        lines.append(
+            f"| {_md_cell(row['requirement'])} | {_md_cell(_commercial_response_note(row['requirement']))} | {_md_cell(_evidence_refs(row) or '缺少报价/合同证据，正式稿不得写成已确认')} | {_md_cell(_commercial_manual_check(row['requirement']))} |"
+        )
+    if not commercial:
+        lines.append("| 待识别 | 未提取到报价、付款、履约保证金或发票相关硬性条款。 | 待补充 | 商务负责人复核招标文件商务章节 |")
+
+    lines += [
+        "",
+        "## 三、技术响应及偏离表",
         "",
         "| 序号 | 技术要求 | 投标响应 | 偏离说明 | 证据链 |",
         "|---|---|---|---|---|",
@@ -680,12 +698,12 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
 
     lines += [
         "",
-        "## 三、技术方案",
+        "## 四、技术方案",
         "",
-        "### 3.1 整体架构设计",
+        "### 4.1 整体架构设计",
         "本项目建议采用分层解耦的私有云架构，覆盖计算虚拟化、分布式块存储、SDN 网络、安全微隔离、统一运维与服务编排。方案以 response matrix 为约束源，所有涉及资格、评分和技术指标的陈述均回链到证据材料。",
         "",
-        "### 3.2 关键能力实现",
+        "### 4.2 关键能力实现",
     ]
     for row in tech:
         evidence_refs = _evidence_refs(row)
@@ -700,7 +718,7 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
 
     lines += [
         "",
-        "### 3.3 评分点支撑",
+        "### 4.3 评分点支撑",
         "",
         "| 评分项 | 响应要点 | 证据定位 | 就绪状态 | 人工复核 |",
         "|---|---|---|---|---|",
@@ -712,11 +730,11 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
 
     lines += [
         "",
-        "## 四、售后服务方案",
+        "## 五、售后服务方案",
         "",
         "投标人承诺建立项目经理、云平台实施工程师、安全工程师和售后响应团队组成的服务组织，提供项目实施、培训、质保和运维支持。人员证书、服务承诺函和原厂支持文件必须在正式稿附件目录中逐项索引。",
         "",
-        "## 五、材料补充清单",
+        "## 六、材料补充清单",
     ]
     missing = [row for row in rows if not row["evidence"]]
     if missing:
@@ -726,9 +744,9 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
 
     lines += [
         "",
-        "## 六、证据索引",
+        "## 七、证据索引",
         "",
-        "### 6.1 材料包视图",
+        "### 7.1 材料包视图",
         "",
         "| 材料包 | 责任人 | 涉及条款/评分项 | 证据ID | 装订提示 |",
         "|---|---|---|---|---|",
@@ -740,7 +758,7 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
 
     lines += [
         "",
-        "### 6.2 证据明细",
+        "### 7.2 证据明细",
         "",
         "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |",
         "|---|---|---|---|---|---|",
@@ -760,6 +778,37 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
 
 def _ids(row: dict[str, Any]) -> str:
     return ", ".join(item["evidence_id"] for item in row["evidence"])
+
+
+def _is_commercial_contract_row(requirement: str) -> bool:
+    text = _plain_requirement(requirement)
+    return any(keyword in text for keyword in ["报价", "付款", "履约保证金", "发票", "投标有效期", "合同价款"])
+
+
+def _commercial_response_note(requirement: str) -> str:
+    text = _plain_requirement(requirement)
+    if "付款" in text or "发票" in text or "合同价款" in text:
+        return "按合同付款节点和发票要求响应，增值税专用发票类别、开票主体、付款条件和报价明细需保持一致，正式稿不得写入未经报价确认的税率或金额。"
+    if "履约保证金" in text:
+        return "按招标文件履约保证金缴纳方式、比例、期限和退还条件响应，需与保证金承诺函及合同条款保持一致。"
+    if "报价" in text or "投标价格" in text:
+        return "按招标报价要求响应，开标一览表、投标价格组成明细表和最终报价口径必须一致；金额、税率、币种和大小写金额由商务负责人最终回填并签核。"
+    if "投标有效期" in text:
+        return "按招标文件要求承诺投标有效期，需与投标函、开标一览表和授权文件中的日期口径一致。"
+    return "按招标商务条款逐项响应，正式稿需由商务负责人核对报价文件、合同条款和签章材料。"
+
+
+def _commercial_manual_check(requirement: str) -> str:
+    text = _plain_requirement(requirement)
+    if "付款" in text or "发票" in text or "合同价款" in text:
+        return "复核付款节点、发票类型、开票主体、税率口径和合同付款条款一致性。"
+    if "履约保证金" in text:
+        return "复核保证金比例、缴纳期限、形式、退还条件和承诺函签章。"
+    if "报价" in text or "投标价格" in text:
+        return "复核开标一览表、报价明细、大小写金额、税率、币种和报价有效性。"
+    if "投标有效期" in text:
+        return "复核投标函、授权书、开标一览表和有效期承诺一致。"
+    return "复核商务响应、报价附件、合同附件和签章状态一致。"
 
 
 def _evidence_refs(row: dict[str, Any]) -> str:

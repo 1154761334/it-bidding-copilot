@@ -215,11 +215,27 @@ def main() -> int:
     )
 
     checks.append(check("draft has realistic structure", all(token in draft for token in ["商务响应", "技术方案", "售后服务方案"])))
+    checks.append(
+        check(
+            "draft has commercial quotation response",
+            all(
+                token in draft
+                for token in [
+                    "## 二、报价及合同商务响应",
+                    "| 商务事项 | 响应口径 | 证据定位 | 签核要求 |",
+                    "投标报价",
+                    "付款",
+                    "履约保证金",
+                    "增值税专用发票",
+                ]
+            ),
+        )
+    )
     checks.append(check("draft expands technical implementation", all(token in draft for token in ["#### T1", "响应口径", "实现要点", "证据定位", "不写无证据的扩展能力"])))
     checks.append(check("draft maps technical notes to clause types", all(token in draft for token in ["一云多芯兼容性", "纠删码保护机制", "服务目录编排"])))
     checks.append(check("draft has scoring response checklist", all(token in draft for token in ["| 评分项 | 响应要点 | 证据定位 | 就绪状态 | 人工复核 |", "证书有效期", "合同金额", "团队人员证书"])))
-    checks.append(check("draft has evidence index", "## 六、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |" in draft))
-    checks.append(check("draft has material package view", all(token in draft for token in ["### 6.1 材料包视图", "资格证明材料", "商务报价材料", "技术评分附件"])))
+    checks.append(check("draft has evidence index", "## 七、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |" in draft))
+    checks.append(check("draft has material package view", all(token in draft for token in ["### 7.1 材料包视图", "资格证明材料", "商务报价材料", "技术评分附件"])))
     checks.append(check("draft evidence index tracks attachment readiness", all(token in draft for token in ["页码/资产提示", "装订状态", "需回填页码"])))
     checks.append(check("draft avoids page placeholders", "第 **X** 页" not in draft and "第X页" not in draft))
     checks.append(check("draft avoids unsupported provided claims", "待补充对应证明材料，正式稿不得写成已提供" not in draft))
