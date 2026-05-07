@@ -1277,6 +1277,75 @@ def _merge_evidence_trace(
     return merged
 
 
+def _draft_with_contract_obligation_appendix(
+    draft_markdown: str,
+    contract_obligation_readiness: dict[str, Any],
+) -> str:
+    marker = "## 八、合同履约响应附录"
+    base = draft_markdown.split(f"\n{marker}", 1)[0].rstrip()
+    lines = [
+        marker,
+        "",
+        "本附录仅将 Review 阶段识别的服务期、服务响应、验收、违约责任、转让分包和合同签署义务转为受控起草口径。正式稿必须以投标人侧证据、法务签核和签章页为准；未签核的期限、金额、违约金或分包条件不得擅自扩写。",
+        "",
+        "| 合同义务 | 受控响应口径 | 证据定位 | 签核缺口 |",
+        "|---|---|---|---|",
+    ]
+    rows = contract_obligation_readiness.get("rows") or []
+    for row in rows:
+        evidence_ids = ", ".join(row.get("evidence_ids") or []) or "待补充"
+        bidder_ids = ", ".join(row.get("bidder_evidence_ids") or []) or "无"
+        tender_ids = ", ".join(row.get("tender_evidence_ids") or []) or "无"
+        evidence_note = f"全部证据：{evidence_ids}；投标人侧：{bidder_ids}；招标依据：{tender_ids}"
+        lines.append(
+            f"| {_md_cell(row['row_id'] + ' ' + row['name'])} | {_md_cell(_contract_draft_response_note(row))} | {_md_cell(evidence_note)} | {_md_cell(_contract_draft_gap_note(row))} |"
+        )
+    if not rows:
+        lines.append("| 未识别 | 未识别可起草的合同履约义务。 | 待补充 | 项目经理/法务复核合同章节 |")
+    return base + "\n\n" + "\n".join(lines) + "\n"
+
+
+def _contract_draft_response_note(row: dict[str, Any]) -> str:
+    name = row.get("name", "")
+    status = row.get("status", "")
+    if status == "tender_only":
+        return f"{name}目前仅有招标/合同条款依据，正式稿不得写成投标人已确认承诺；需补投标人侧承诺或法务签核后再定稿。"
+    if status == "missing_evidence":
+        return f"{name}缺少可回溯证据，正式稿只能列为待补充，不得写成已满足。"
+
+    prefix = "按投标人侧证据作原则响应"
+    if status == "needs_page_hint":
+        prefix = "按投标人侧证据作受控响应，但需回填页码、截图编号或附件文件名"
+
+    if "服务期" in name:
+        return f"{prefix}，服务周期、实施期、运维期和现场服务人日须与服务承诺及实施计划保持一致。"
+    if "服务响应" in name:
+        return f"{prefix}，故障受理、响应时限、远程/现场支持和升级路径须与售后服务方案保持一致。"
+    if "验收" in name:
+        return f"{prefix}，验收资料、履约完成通知、验收配合和项目交付节点须与实施计划保持一致。"
+    if "违约" in name:
+        return f"{prefix}，违约金、解除合同、保证金扣除和赔偿口径须经法务签核后写入。"
+    if "转让" in name or "分包" in name:
+        return f"{prefix}，不得转让、不得整体转包、分包需书面同意等限制须按合同条款和投标承诺一致响应。"
+    if "签订" in name or "生效" in name:
+        return f"{prefix}，签约主体、授权代表、签订时间地点和合同生效条件须与授权文件一致。"
+    return f"{prefix}，正式稿需由项目经理和法务复核合同响应、签章状态和附件索引。"
+
+
+def _contract_draft_gap_note(row: dict[str, Any]) -> str:
+    status = row.get("status", "")
+    missing_ids = ", ".join(row.get("missing_bidder_evidence_ids") or [])
+    if status == "ready":
+        return f"可签核；仍需复核：{row.get('manual_check', '')}"
+    if status == "needs_page_hint":
+        return f"需回填投标人侧证据页码/附件编号：{missing_ids or '待定位'}；{row.get('manual_check', '')}"
+    if status == "tender_only":
+        return f"仅招标依据；需补投标人侧承诺或法务签核：{row.get('required_evidence', '')}"
+    if status == "missing_evidence":
+        return f"缺少证据：{row.get('required_evidence', '')}"
+    return row.get("manual_check", "")
+
+
 def _contract_obligation_readiness(
     db: Session,
     tender_markdown: str,
@@ -1682,6 +1751,16 @@ def generate_review(project_id: str, db: Session) -> dict[str, Any]:
         "handoff_artifact": "handoff.md",
         "findings": findings,
     }
+    draft_text = read_artifact_text(project_id, "draft.md")
+    reviewed_draft = _draft_with_contract_obligation_appendix(draft_text, contract_obligation_readiness)
+    _write_artifact(project_id, "draft.md", reviewed_draft)
+    project["draft_markdown"] = reviewed_draft
+    if not any(item.get("name") == "合同履约响应附录" for item in project.get("draft_sections", [])):
+        project.setdefault("draft_sections", []).append({"name": "合同履约响应附录", "artifact": "draft.md"})
+    execution = project.get("execution") or {}
+    if execution:
+        execution["draft_sections"] = max(int(execution.get("draft_sections") or 0), len(project.get("draft_sections", [])))
+        project["execution"] = execution
     _write_artifact(project_id, "review.md", _review_markdown(review))
     _write_artifact(project_id, "handoff.md", _handoff_markdown(project, review))
     project["review"] = review

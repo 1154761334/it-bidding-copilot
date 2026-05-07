@@ -552,3 +552,30 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a Draft-side contract response appendix that turns the new C1-C6 contract-obligation readiness into controlled draft language without inventing unsupported legal commitments.
+
+## 2026-05-08 Round 21
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `82/82`, project `71`, evidence trace length `94`.
+- Lowest item: Review surfaced C1-C6 contract-obligation readiness, but `draft.md` still had no controlled contract response appendix. Trial users could see the review gaps but had no safe draft-side language for service period, service response, acceptance, breach liability, transfer/subcontracting, or contract signing conditions.
+
+### Changes
+- Added a generated `## 八、合同履约响应附录` to `draft.md` during Review, converting C1-C6 readiness rows into controlled draft language.
+- Added explicit drafting boundaries so unsupported legal commitments, unsigned deadlines, amounts, liquidated damages, and subcontracting conditions are not expanded without bidder evidence and legal signoff.
+- Added contract appendix response/gap helpers that distinguish ready rows, page/asset backfill rows, tender-only rows, and missing-evidence rows.
+- Updated project draft metadata so `合同履约响应附录` is exposed as a sixth draft section after Review.
+- Tightened `eval_bid_assistant.py` from 82 to 84 checks covering the draft appendix and project metadata.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `84/84`, project `72`, evidence trace length `94`.
+- Artifact spot check: project `72` `draft.md` includes `合同履约响应附录`, C1 service-period page-hint gaps, C4 tender-only breach-liability language, and the unsupported-commitment drafting boundary; `project.json` exposes six draft sections including `合同履约响应附录`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: update the draft evidence index/material package view to include Review-stage C-row contract evidence under `合同履约材料`, so appendix evidence is visible in the draft's own evidence index rather than only in trace/review/handoff artifacts.

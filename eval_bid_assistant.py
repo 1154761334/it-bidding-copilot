@@ -208,6 +208,14 @@ def main() -> int:
             str(contract_readiness.get("rows", [])[:2]),
         )
     )
+    checks.append(
+        check(
+            "project exposes draft contract appendix section",
+            any(item.get("name") == "合同履约响应附录" for item in detail_json.get("draft_sections", []))
+            and (detail_json.get("execution") or {}).get("draft_sections", 0) >= 6,
+            str(detail_json.get("draft_sections", [])),
+        )
+    )
     checks.append(check("project exposes handoff artifact", review_payload.get("handoff_artifact") == "handoff.md", str(review_payload.get("handoff_artifact"))))
 
     artifacts = set(demo_json.get("artifacts", []))
@@ -290,6 +298,22 @@ def main() -> int:
     checks.append(check("draft expands technical implementation", all(token in draft for token in ["#### T1", "响应口径", "实现要点", "证据定位", "不写无证据的扩展能力"])))
     checks.append(check("draft maps technical notes to clause types", all(token in draft for token in ["一云多芯兼容性", "纠删码保护机制", "服务目录编排"])))
     checks.append(check("draft has scoring response checklist", all(token in draft for token in ["| 评分项 | 响应要点 | 证据定位 | 就绪状态 | 人工复核 |", "证书有效期", "合同金额", "团队人员证书"])))
+    checks.append(
+        check(
+            "draft has contract obligation appendix",
+            all(
+                token in draft
+                for token in [
+                    "## 八、合同履约响应附录",
+                    "| 合同义务 | 受控响应口径 | 证据定位 | 签核缺口 |",
+                    "C1 服务期及现场服务",
+                    "C4 违约责任及解除合同",
+                    "仅招标依据",
+                    "未签核的期限、金额、违约金或分包条件不得擅自扩写",
+                ]
+            ),
+        )
+    )
     checks.append(check("draft has evidence index", "## 七、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |" in draft))
     checks.append(check("draft has material package view", all(token in draft for token in ["### 7.1 材料包视图", "资格证明材料", "商务报价材料", "技术评分附件"])))
     checks.append(check("draft evidence index tracks attachment readiness", all(token in draft for token in ["页码/资产提示", "装订状态", "需回填页码"])))
