@@ -182,6 +182,32 @@ def main() -> int:
             str(commercial_readiness.get("rows", [])[:2]),
         )
     )
+    contract_readiness = review_payload.get("contract_obligation_readiness") or {}
+    checks.append(
+        check(
+            "project exposes contract obligation readiness",
+            all(
+                key in contract_readiness
+                for key in [
+                    "ready",
+                    "total",
+                    "needs_page_hint",
+                    "tender_only",
+                    "rows",
+                    "not_ready_rows",
+                ]
+            )
+            and contract_readiness.get("total", 0) >= 5,
+            str(contract_readiness),
+        )
+    )
+    checks.append(
+        check(
+            "project flags contract obligation bidder evidence gaps",
+            any(row.get("status") != "ready" and row.get("row_id", "").startswith("C") for row in contract_readiness.get("rows", [])),
+            str(contract_readiness.get("rows", [])[:2]),
+        )
+    )
     checks.append(check("project exposes handoff artifact", review_payload.get("handoff_artifact") == "handoff.md", str(review_payload.get("handoff_artifact"))))
 
     artifacts = set(demo_json.get("artifacts", []))
@@ -222,8 +248,12 @@ def main() -> int:
     trace_ids = {item.get("evidence_id") for item in trace}
     matrix_ids = set(EVID_RE.findall(matrix))
     draft_ids = set(EVID_RE.findall(draft))
+    review_ids = set(EVID_RE.findall(review))
+    handoff_ids = set(EVID_RE.findall(handoff))
     checks.append(check("matrix evidence ids fully traced", matrix_ids <= trace_ids, str(sorted(matrix_ids - trace_ids)[:5])))
     checks.append(check("draft evidence ids fully traced", draft_ids <= trace_ids, str(sorted(draft_ids - trace_ids)[:5])))
+    checks.append(check("review evidence ids fully traced", review_ids <= trace_ids, str(sorted(review_ids - trace_ids)[:5])))
+    checks.append(check("handoff evidence ids fully traced", handoff_ids <= trace_ids, str(sorted(handoff_ids - trace_ids)[:5])))
     checks.append(
         check(
             "trace records include source metadata",
@@ -272,10 +302,11 @@ def main() -> int:
     checks.append(check("review has attachment readiness", all(token in review for token in ["## 附件就绪度", "投标人侧证据", "装订状态"])))
     checks.append(check("review has scoring readiness", all(token in review for token in ["## 评分就绪度", "评分项就绪", "需补投标人材料"])))
     checks.append(check("review has commercial evidence readiness", all(token in review for token in ["## 商务证据签核", "投标人侧商务证据", "仅招标依据", "需回填页码/附件编号"])))
+    checks.append(check("review has contract obligation readiness", all(token in review for token in ["## 合同履约义务复核", "服务期", "验收", "违约责任", "转让分包"])))
     checks.append(
         check(
             "review has action checklist",
-            all(token in review for token in ["## 操作清单", "责任人", "商务证据回填", "附件定位", "评分定位"]),
+            all(token in review for token in ["## 操作清单", "责任人", "商务证据回填", "合同义务签核", "附件定位", "评分定位"]),
         )
     )
     checks.append(
@@ -313,6 +344,7 @@ def main() -> int:
         )
     )
     checks.append(check("handoff lists commercial evidence gaps", all(token in handoff for token in ["商务证据签核", "H1", "EVID-42", "投标人侧"])))
+    checks.append(check("handoff lists contract obligation gaps", all(token in handoff for token in ["合同履约义务", "C1", "服务期", "投标人侧"])))
     checks.append(check("handoff states evidence boundary", "未列入证据链的内容不得在正式稿中写成已提供" in handoff))
 
     frontend_route = read_repo_text("frontend/src/business/client/BusinessDesktopRoutes.tsx")
@@ -419,6 +451,7 @@ def main() -> int:
     checks.append(check("frontend review tab shows attachment readiness", all(token in frontend_review_tab for token in ["attachment_readiness", "Attachment Readiness", "needs_page_hint"])))
     checks.append(check("frontend review tab shows scoring readiness", all(token in frontend_review_tab for token in ["scoring_readiness", "Scoring Readiness", "needs_bidder_evidence"])))
     checks.append(check("frontend review tab shows commercial evidence readiness", all(token in frontend_review_tab for token in ["commercial_evidence_readiness", "Commercial Evidence Readiness", "tender_only"])))
+    checks.append(check("frontend review tab shows contract obligation readiness", all(token in frontend_review_tab for token in ["contract_obligation_readiness", "Contract Obligation Readiness", "tender_only"])))
     checks.append(
         check(
             "frontend review tab shows action checklist",

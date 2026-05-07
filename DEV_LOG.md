@@ -522,3 +522,33 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: expand review coverage for contract execution obligations such as service period, acceptance, breach liability, subcontracting/transfer, and contract signing conditions so non-pricing contract risks are not hidden behind generic commercial review.
+
+## 2026-05-08 Round 20
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `75/75`, project `67`, evidence trace length `70`.
+- Lowest item: non-pricing contract execution obligations were still hidden behind generic commercial review. Service period, service response, acceptance, breach liability, transfer/subcontracting, and contract signing conditions were not surfaced as a dedicated readiness/risk view.
+
+### Changes
+- Added `contract_obligation_readiness` to review payloads, derived from the real tender contract sections and evidence store search, with C1-C6 row ids for service period, service response, acceptance, breach liability, transfer/subcontracting, and contract signing conditions.
+- Merged contract-obligation evidence records into `evidence_trace.json` during Review, preserving evidence_id traceability for review.md and handoff.md references.
+- Added `合同履约材料` as a material group and included it in review material-package handoff.
+- Added `合同履约风险` risk bucket, `合同义务签核` action item, and `## 合同履约义务复核` section in `review.md`.
+- Added contract-obligation gaps to `handoff.md`, including the tender-only breach-liability row C4 and page-hint gaps for C1/C2/C3/C5/C6.
+- Updated `/bid` project readiness badges and Review tab with `Contract Obligation Readiness`.
+- Tightened `eval_bid_assistant.py` from 75 to 82 checks, including review/handoff evidence_id trace coverage.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py backend/src/main.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingReviewTab.tsx src/features/Bidding/BiddingWorkbench.tsx src/services/bidding.ts`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `82/82`, project `69`, evidence trace length `94`.
+- Artifact spot check: project `69` `review.md` shows `合同履约义务复核`, `合同义务签核`, C1 service-period page-hint gaps, C4 tender-only breach-liability evidence, and `合同履约材料`; `handoff.md` lists contract obligation gaps for C1-C6; `evidence_trace.json` contains C-row records with `合同履约材料`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a Draft-side contract response appendix that turns the new C1-C6 contract-obligation readiness into controlled draft language without inventing unsupported legal commitments.

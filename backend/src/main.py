@@ -151,8 +151,8 @@ def execute_project(project_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/projects/{project_id}/review")
-def review_project(project_id: str):
-    return generate_review(project_id)
+def review_project(project_id: str, db: Session = Depends(get_db)):
+    return generate_review(project_id, db)
 
 
 @app.get("/projects/{project_id}/artifacts")
