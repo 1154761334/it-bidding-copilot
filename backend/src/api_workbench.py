@@ -204,8 +204,21 @@ def search_evidence_payload(db: Session, query: str, category: str | None = None
 
 def _clean_line(line: str) -> str:
     line = re.sub(r"<[^>]+>", "", line)
+    line = re.sub(r"^#+\s*", "", line.strip())
+    line = line.replace("**", "").replace("__", "").strip("> ")
     line = re.sub(r"\s+", " ", line).strip(" |　\t")
     return line
+
+
+def _md_cell(value: Any) -> str:
+    """Escape a value for safe use inside a Markdown table cell."""
+    text = _clean_line(str(value))
+    text = text.replace("\\", "\\\\").replace("|", "\\|")
+    return text.replace("\n", "<br>")
+
+
+def _plain_requirement(value: str) -> str:
+    return _clean_line(value).replace("|", " / ")
 
 
 def _extract_marked_items(markdown: str, mark: str, limit: int = 12) -> list[str]:
@@ -256,6 +269,11 @@ def _scoring_items(markdown: str) -> list[dict[str, str]]:
 
 def _query_for(text: str) -> str:
     rules = [
+        ("实质性内容", "实质性 内容 明确响应 无效"),
+        ("明确响应", "实质性 内容 明确响应 无效"),
+        ("投标报价", "投标报价 报价要求"),
+        ("付款方式", "付款方式 发票 合同价款"),
+        ("履约保证金", "履约保证金"),
         ("营业执照", "营业执照 独立承担民事责任"),
         ("授权", "授权书 售后服务承诺函 原厂"),
         ("ISO9001", "ISO9001 质量管理体系认证"),
@@ -420,7 +438,7 @@ def _matrix_row(db: Session, row_id: str, row_type: str, requirement: str, respo
     return {
         "id": row_id,
         "type": row_type,
-        "requirement": requirement,
+        "requirement": _plain_requirement(requirement),
         "response_strategy": response_strategy,
         "evidence": evidence,
         "status": "covered" if evidence else "missing_evidence",
@@ -436,8 +454,9 @@ def _matrix_markdown(rows: list[dict[str, Any]]) -> str:
     ]
     for row in rows:
         ids = ", ".join(item["evidence_id"] for item in row["evidence"]) or "待补充"
-        requirement = row["requirement"].replace("|", " ")
-        lines.append(f"| {row['id']} | {row['type']} | {requirement} | {row['response_strategy']} | {ids} | {row['status']} |")
+        lines.append(
+            f"| {_md_cell(row['id'])} | {_md_cell(row['type'])} | {_md_cell(row['requirement'])} | {_md_cell(row['response_strategy'])} | {_md_cell(ids)} | {_md_cell(row['status'])} |"
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -461,7 +480,7 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
         ids = _ids(row)
         response = "已按要求响应，详见证据链。" if ids else "待补充对应证明材料，正式稿不得写成已提供。"
         deviation = "无偏离" if ids else "材料待补充"
-        lines.append(f"| {idx} | {row['requirement']} | {response} | {deviation} | {ids or '待补充'} |")
+        lines.append(f"| {idx} | {_md_cell(row['requirement'])} | {_md_cell(response)} | {_md_cell(deviation)} | {_md_cell(ids or '待补充')} |")
 
     lines += [
         "",
@@ -475,7 +494,9 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
         response = "采用成熟私有云平台能力逐项响应，并在技术方案中展开实现路径。"
         if not ids:
             response = "能力描述需补充截图、产品白皮书或原厂证明后进入正式稿。"
-        lines.append(f"| {idx} | {row['requirement']} | {response} | {'无偏离' if ids else '证据待补充'} | {ids or '待补充'} |")
+        lines.append(
+            f"| {idx} | {_md_cell(row['requirement'])} | {_md_cell(response)} | {_md_cell('无偏离' if ids else '证据待补充')} | {_md_cell(ids or '待补充')} |"
+        )
 
     lines += [
         "",
@@ -487,14 +508,14 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
         "### 3.2 关键能力实现",
     ]
     for row in tech:
-        lines.append(f"- {row['requirement']} 证据链：{_ids(row) or '待补充'}。")
+        lines.append(f"- {_plain_requirement(row['requirement'])} 证据链：{_ids(row) or '待补充'}。")
 
     lines += [
         "",
         "### 3.3 评分点支撑",
     ]
     for row in scoring:
-        lines.append(f"- {row['requirement']}：{_ids(row) or '缺少直接证据，列入补材料清单'}。")
+        lines.append(f"- {_plain_requirement(row['requirement'])}：{_ids(row) or '缺少直接证据，列入补材料清单'}。")
 
     lines += [
         "",
@@ -506,9 +527,26 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     ]
     missing = [row for row in rows if not row["evidence"]]
     if missing:
-        lines += [f"- {row['id']} {row['requirement']}" for row in missing]
+        lines += [f"- {row['id']} {_plain_requirement(row['requirement'])}" for row in missing]
     else:
         lines.append("- 当前 response matrix 均已有可追溯 evidence_id。")
+
+    lines += [
+        "",
+        "## 六、证据索引",
+        "",
+        "| 证据ID | 标题 | 来源文件 | 来源位置 |",
+        "|---|---|---|---|",
+    ]
+    seen: set[str] = set()
+    for row in rows:
+        for item in row["evidence"]:
+            if item["evidence_id"] in seen:
+                continue
+            seen.add(item["evidence_id"])
+            lines.append(
+                f"| {_md_cell(item['evidence_id'])} | {_md_cell(item['title'])} | {_md_cell(item['source_doc'])} | {_md_cell(item['heading_path'] or item['page_hint'] or '待回填页码')} |"
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -535,11 +573,14 @@ def generate_review(project_id: str) -> dict[str, Any]:
     for line in missing_rows:
         severity = "high" if "| hard_clause |" in line else "medium"
         area = "废标风险" if severity == "high" else "评分风险"
-        message = "该条款缺少可回溯 evidence_id，正式稿不得宣称已提供证明材料。"
+        requirement = line.split("|")[3].strip() if len(line.split("|")) > 3 else "未知条款"
+        message = f"该条款缺少可回溯 evidence_id：{requirement}。正式稿不得宣称已提供证明材料。"
         findings.append({"severity": severity, "area": area, "message": message, "suggestion": "补充真实附件或将响应改为待补充。"})
 
-    if "待补充" not in project.get("draft_markdown", "") and not findings:
-        findings.append({"severity": "low", "area": "材料索引", "message": "建议在正式排版阶段补充页码索引。", "suggestion": "由装订稿页码回填。"})
+    if "投标人待填写" in project.get("draft_markdown", ""):
+        findings.append({"severity": "medium", "area": "签章与主体信息", "message": "投标人名称仍为待填写，正式投标文件存在主体信息不完整风险。", "suggestion": "回填投标人全称并同步封面、授权书、偏离表。"})
+
+    findings.append({"severity": "low", "area": "材料索引", "message": "正式装订前需回填附件页码、签章状态和原件/复印件一致性。", "suggestion": "由装订稿页码回填证据索引。"})
 
     review = {
         "score_coverage": {"covered": covered_rows, "total": total_rows},

@@ -7,6 +7,7 @@ not call or mock an LLM.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,58 @@ from src.main import app  # noqa: E402
 
 def check(name: str, ok: bool, details: str = "") -> dict[str, Any]:
     return {"name": name, "ok": bool(ok), "details": details}
+
+
+EVID_RE = re.compile(r"EVID-\d+")
+
+
+def split_md_row(line: str) -> list[str]:
+    """Split a Markdown table row on unescaped pipes."""
+    if line.startswith("|"):
+        line = line[1:]
+    if line.endswith("|"):
+        line = line[:-1]
+    cells: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for char in line:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            current.append(char)
+            escaped = True
+            continue
+        if char == "|":
+            cells.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+    cells.append("".join(current).strip())
+    return cells
+
+
+def table_rows(markdown: str, expected_columns: int) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for line in markdown.splitlines():
+        if not line.startswith("| ") or line.startswith("|---") or line.startswith("| ID") or line.startswith("| 序号") or line.startswith("| 证据ID"):
+            continue
+        cells = split_md_row(line)
+        if len(cells) == expected_columns:
+            rows.append(cells)
+    return rows
+
+
+def malformed_table_rows(markdown: str, expected_columns: int | set[int]) -> list[str]:
+    allowed = {expected_columns} if isinstance(expected_columns, int) else expected_columns
+    bad: list[str] = []
+    for line in markdown.splitlines():
+        if not line.startswith("| ") or line.startswith("|---"):
+            continue
+        if len(split_md_row(line)) not in allowed:
+            bad.append(line)
+    return bad
 
 
 def main() -> int:
@@ -74,11 +127,36 @@ def main() -> int:
     matrix = artifact_text["response_matrix.md"]
     draft = artifact_text["draft.md"]
     review = artifact_text["review.md"]
-    checks.append(check("matrix covers hard clauses", "| hard_clause |" in matrix))
-    checks.append(check("matrix covers scoring items", "| scoring_item |" in matrix))
+    matrix_rows = table_rows(matrix, 6)
+    hard_rows = [row for row in matrix_rows if row[1] == "hard_clause"]
+    tech_rows = [row for row in matrix_rows if row[1] == "technical_requirement"]
+    scoring_rows = [row for row in matrix_rows if row[1] == "scoring_item"]
+    checks.append(check("matrix table is well formed", not malformed_table_rows(matrix, 6), str(malformed_table_rows(matrix, 6)[:1])))
+    checks.append(check("draft tables are well formed", not malformed_table_rows(draft, {4, 5}), str(malformed_table_rows(draft, {4, 5})[:1])))
+    checks.append(check("matrix covers hard clauses", len(hard_rows) >= 5, str(len(hard_rows))))
+    checks.append(check("matrix covers technical requirements", len(tech_rows) >= 8, str(len(tech_rows))))
+    checks.append(check("matrix covers scoring items", len(scoring_rows) >= 5, str(len(scoring_rows))))
+    checks.append(check("matrix has no missing evidence", "missing_evidence" not in matrix))
+
+    trace_ids = {item.get("evidence_id") for item in trace}
+    matrix_ids = set(EVID_RE.findall(matrix))
+    draft_ids = set(EVID_RE.findall(draft))
+    checks.append(check("matrix evidence ids fully traced", matrix_ids <= trace_ids, str(sorted(matrix_ids - trace_ids)[:5])))
+    checks.append(check("draft evidence ids fully traced", draft_ids <= trace_ids, str(sorted(draft_ids - trace_ids)[:5])))
+    checks.append(
+        check(
+            "trace records include source metadata",
+            all(item.get("source_doc") and item.get("heading_path") for item in trace),
+            str([item for item in trace if not item.get("source_doc") or not item.get("heading_path")][:1]),
+        )
+    )
+
     checks.append(check("draft has realistic structure", all(token in draft for token in ["商务响应", "技术方案", "售后服务方案"])))
+    checks.append(check("draft has evidence index", "## 六、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 |" in draft))
     checks.append(check("draft avoids page placeholders", "第 **X** 页" not in draft and "第X页" not in draft))
-    checks.append(check("review flags coverage or findings", "评分覆盖" in review and "硬性条款覆盖" in review))
+    checks.append(check("draft avoids unsupported provided claims", "待补充对应证明材料，正式稿不得写成已提供" not in draft))
+    checks.append(check("review flags coverage", "评分覆盖" in review and "硬性条款覆盖" in review))
+    checks.append(check("review flags missing form risks", "签章与主体信息" in review and "材料索引" in review))
 
     passed = sum(1 for item in checks if item["ok"])
     total = len(checks)

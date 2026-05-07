@@ -29,3 +29,28 @@
 ### Blockers / Next
 - Legacy LLM RAG script `cd backend && venv/bin/python tests/test_rag_workflow.py` is blocked until `LLM_API_KEY` is provided via environment and provider quota is available. It now fails closed instead of using hardcoded credentials.
 - Next useful iteration: improve deterministic tender parsing precision and make review findings more granular for missing materials versus scoring-risk evidence.
+
+## 2026-05-07 Round 2
+
+### Baseline
+- Lowest item: generated artifact quality. Baseline acceptance passed, but manual inspection showed `draft.md` could emit malformed Markdown table rows when requirements contained `|`, `response_matrix.md` could mark a generic `▲`实质性条款 as `missing_evidence`, and `review.md` did not consistently flag form/completeness risks.
+- The evaluator was too permissive for document quality: it checked artifact existence and broad sections, but did not validate table shape, trace completeness, missing-evidence leakage, or review risk specificity.
+
+### Changes
+- Escaped Markdown table cells and normalized extracted requirements before writing response matrices, drafts, bullets, and evidence indexes.
+- Expanded deterministic evidence query mapping for generic substantive clauses, clear-response clauses, quotation/payment/guarantee terms, and existing qualification keywords.
+- Added a `## 六、证据索引` section to generated drafts, linking every cited `EVID-*` item to title, source file, and source heading.
+- Made review findings include the exact missing requirement when evidence is absent, and always report subject/signature and material-index completion risks for formal filing.
+- Tightened `eval_bid_assistant.py` from 18 to 28 checks covering Markdown table integrity, hard/technical/scoring coverage counts, absence of `missing_evidence`, full evidence trace linkage, source metadata, evidence index, and review risk areas.
+
+### Verification
+- `cd backend && venv/bin/python -m py_compile src/api_workbench.py ../eval_bid_assistant.py`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `28/28`, project `9`, evidence trace length `70`.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: compare generated draft language against the real tender scoring table clause by clause and add stronger acceptance checks for commercial quotation and delivery-period consistency.
