@@ -433,6 +433,9 @@ def main() -> int:
     frontend_draft_tab = read_repo_text("frontend/src/features/Bidding/BiddingDraftTab.tsx")
     frontend_draft_tab_test = read_repo_text("frontend/src/features/Bidding/BiddingDraftTab.test.tsx")
     frontend_bid_route_smoke = read_repo_text("frontend/scripts/bidding/smokeBidRoute.mts")
+    frontend_bid_route_storage_capture = read_repo_text("frontend/scripts/bidding/captureBidRouteStorageState.mts")
+    frontend_gitignore = read_repo_text("frontend/.gitignore")
+    frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
     frontend_review_tab = read_repo_text("frontend/src/features/Bidding/BiddingReviewTab.tsx")
     checks.append(check("frontend /bid route wired", "path: 'bid'" in frontend_route and "BiddingWorkbench" in frontend_route))
@@ -580,6 +583,24 @@ def main() -> int:
                     "/signin",
                 ]
             ),
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route storage state capture is standardized",
+            all(
+                token in frontend_bid_route_storage_capture
+                for token in [
+                    "BID_ROUTE_STORAGE_STATE",
+                    "BID_ROUTE_STORAGE_STATE_READY",
+                    "BID_ROUTE_LOGIN_REQUIRED",
+                    "SAFE_BOOTSTRAP_ENV_NAMES",
+                    ".auth/bid-route-storage-state.json",
+                    "storageState",
+                ]
+            )
+            and ".auth/" in frontend_gitignore
+            and "capture:bid-storage-state" in frontend_package_json,
         )
     )
     checks.append(

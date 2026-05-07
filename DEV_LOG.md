@@ -749,3 +749,36 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a documented helper for creating the Playwright storage state from an already-running local production instance, so the production-route smoke can be run repeatably without embedding credentials in the repo.
+
+## 2026-05-08 Round 28
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `92/92`, project `99`, evidence trace length `94`.
+- Lowest item: the production-route smoke could consume `BID_ROUTE_STORAGE_STATE`, but there was no standardized helper for creating that Playwright storage state from an already-running local instance without writing credentials into repo files or logs.
+
+### Changes
+- Added `frontend/scripts/bidding/captureBidRouteStorageState.mts` to open the configured `/bid` route, wait for the real Bidding Assistant view, and write a Playwright storage-state file.
+- The capture helper reports `BID_ROUTE_LOGIN_REQUIRED` with environment variable names only when it lands on `/signin` or `/signup`, then allows an operator to complete login in headed mode before capture.
+- Added the `capture:bid-storage-state` package script and ignored the default `.auth/` storage-state directory.
+- Tightened `eval_bid_assistant.py` from 92 to 93 checks by requiring the capture helper, safe diagnostics, ignored default storage path, and package script.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `93/93`, project `103`, evidence trace length `94`.
+- `cd frontend && pnpm exec eslint scripts/bidding/captureBidRouteStorageState.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `cd frontend && BID_FRONTEND_BASE_URL=http://127.0.0.1:9876 BID_ROUTE_STORAGE_STATE=/tmp/bid-route-storage-state-round28.json HEADLESS=true pnpm exec tsx scripts/bidding/captureBidRouteStorageState.mts`: PASS, emitted `BID_ROUTE_STORAGE_STATE_READY`; the temporary `/tmp` storage-state file was removed after the run.
+- `cd frontend && pnpm exec tsx scripts/bidding/smokeBidRoute.mts`: PASS against `http://127.0.0.1:9876/bid`, API status `ok`, evidence count `253`, auth mode `not_required`; temporary FastAPI and SPA dev servers were stopped after the smoke.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Artifacts
+- The new capture helper emits `BID_ROUTE_LOGIN_REQUIRED` for auth bootstrap guidance and `BID_ROUTE_STORAGE_STATE_READY` once a reusable storage-state file has been written.
+- The default storage-state artifact path is `.auth/bid-route-storage-state.json`, and `.auth/` is ignored so local browser state stays out of commits.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: run the `/spa/.../bid` smoke against an authenticated local Next instance using the captured storage state, then promote that production-route path into the regular acceptance gates if it is stable in CI-like environments.
