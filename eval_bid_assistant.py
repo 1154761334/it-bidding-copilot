@@ -605,6 +605,23 @@ def main() -> int:
     )
     checks.append(
         check(
+            "frontend bid route production smoke scripts are standardized",
+            all(
+                token in frontend_package_json
+                for token in [
+                    "capture:bid-storage-state:prod",
+                    "smoke:bid-route",
+                    "smoke:bid-route:prod",
+                    "BID_FRONTEND_BASE_URL=http://127.0.0.1:3210",
+                    "BID_ROUTE_PATH=/spa/desktop/bid",
+                ]
+            )
+            and "BID_ROUTE_STORAGE_STATE" in frontend_bid_route_smoke
+            and "BID_ROUTE_AUTH_REQUIRED" in frontend_bid_route_smoke,
+        )
+    )
+    checks.append(
+        check(
             "frontend evidence tab has material group presets",
             all(
                 token in frontend_evidence_tab

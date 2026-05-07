@@ -782,3 +782,35 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: run the `/spa/.../bid` smoke against an authenticated local Next instance using the captured storage state, then promote that production-route path into the regular acceptance gates if it is stable in CI-like environments.
+
+## 2026-05-08 Round 29
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `93/93`, project `104`, evidence trace length `94`.
+- Lowest item: the production `/spa/.../bid` route smoke could be assembled from env vars, but there was no package-level entrypoint tying the production route path and local Next port together. Operators still had to remember the exact `BID_FRONTEND_BASE_URL` and `BID_ROUTE_PATH` values.
+
+### Changes
+- Added `smoke:bid-route` as the default Vite `/bid` smoke entrypoint.
+- Added `smoke:bid-route:prod` for the local Next production path at `http://127.0.0.1:3210/spa/desktop/bid`.
+- Added `capture:bid-storage-state:prod` so storage-state capture and production-route smoke share the same route preset.
+- Tightened `eval_bid_assistant.py` from 93 to 94 checks by requiring the production smoke/capture package scripts and the storage-state/auth diagnostic support.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `94/94`, project `106`, evidence trace length `94`.
+- `cd frontend && pnpm exec prettier --check package.json`: PASS.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run smoke:bid-route`: PASS against `http://127.0.0.1:9876/bid`, API status `ok`, evidence count `253`, auth mode `not_required`; temporary FastAPI and SPA dev servers were stopped after the smoke.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Artifacts
+- `pnpm run smoke:bid-route` now gives a stable default acceptance command for the Vite `/bid` route.
+- `pnpm run smoke:bid-route:prod` and `pnpm run capture:bid-storage-state:prod` now encode the local production route preset without storing credentials or storage state in the repo.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a non-secret local production-route runbook that sequences Next startup, storage-state capture, and `smoke:bid-route:prod`, including the expected auth-required diagnostic when storage state is absent.
