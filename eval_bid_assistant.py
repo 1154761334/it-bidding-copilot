@@ -156,6 +156,32 @@ def main() -> int:
             str(material_groups),
         )
     )
+    commercial_readiness = review_payload.get("commercial_evidence_readiness") or {}
+    checks.append(
+        check(
+            "project exposes commercial evidence readiness",
+            all(
+                key in commercial_readiness
+                for key in [
+                    "ready",
+                    "total",
+                    "needs_page_hint",
+                    "tender_only",
+                    "rows",
+                    "not_ready_rows",
+                ]
+            )
+            and commercial_readiness.get("total", 0) >= 5,
+            str(commercial_readiness),
+        )
+    )
+    checks.append(
+        check(
+            "project flags commercial bidder evidence gaps",
+            any(row.get("status") == "needs_page_hint" and row.get("bidder_evidence_ids") for row in commercial_readiness.get("rows", [])),
+            str(commercial_readiness.get("rows", [])[:2]),
+        )
+    )
     checks.append(check("project exposes handoff artifact", review_payload.get("handoff_artifact") == "handoff.md", str(review_payload.get("handoff_artifact"))))
 
     artifacts = set(demo_json.get("artifacts", []))
@@ -245,10 +271,11 @@ def main() -> int:
     checks.append(check("review flags missing form risks", "签章与主体信息" in review and "材料索引" in review))
     checks.append(check("review has attachment readiness", all(token in review for token in ["## 附件就绪度", "投标人侧证据", "装订状态"])))
     checks.append(check("review has scoring readiness", all(token in review for token in ["## 评分就绪度", "评分项就绪", "需补投标人材料"])))
+    checks.append(check("review has commercial evidence readiness", all(token in review for token in ["## 商务证据签核", "投标人侧商务证据", "仅招标依据", "需回填页码/附件编号"])))
     checks.append(
         check(
             "review has action checklist",
-            all(token in review for token in ["## 操作清单", "责任人", "附件定位", "评分定位"]),
+            all(token in review for token in ["## 操作清单", "责任人", "商务证据回填", "附件定位", "评分定位"]),
         )
     )
     checks.append(
@@ -285,6 +312,7 @@ def main() -> int:
             all(token in handoff for token in ["## 证据缺口", "EVID-74", "S3", "需回填页码"]),
         )
     )
+    checks.append(check("handoff lists commercial evidence gaps", all(token in handoff for token in ["商务证据签核", "H1", "EVID-42", "投标人侧"])))
     checks.append(check("handoff states evidence boundary", "未列入证据链的内容不得在正式稿中写成已提供" in handoff))
 
     frontend_route = read_repo_text("frontend/src/business/client/BusinessDesktopRoutes.tsx")
@@ -390,6 +418,7 @@ def main() -> int:
     )
     checks.append(check("frontend review tab shows attachment readiness", all(token in frontend_review_tab for token in ["attachment_readiness", "Attachment Readiness", "needs_page_hint"])))
     checks.append(check("frontend review tab shows scoring readiness", all(token in frontend_review_tab for token in ["scoring_readiness", "Scoring Readiness", "needs_bidder_evidence"])))
+    checks.append(check("frontend review tab shows commercial evidence readiness", all(token in frontend_review_tab for token in ["commercial_evidence_readiness", "Commercial Evidence Readiness", "tender_only"])))
     checks.append(
         check(
             "frontend review tab shows action checklist",

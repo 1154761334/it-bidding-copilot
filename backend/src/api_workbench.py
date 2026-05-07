@@ -132,7 +132,8 @@ def _project_readiness_summary(project: dict[str, Any]) -> dict[str, Any] | None
     review = project.get("review") or {}
     attachment = review.get("attachment_readiness") or {}
     scoring = review.get("scoring_readiness") or {}
-    if not attachment and not scoring:
+    commercial = review.get("commercial_evidence_readiness") or {}
+    if not attachment and not scoring and not commercial:
         return None
 
     attachment_gap = int(attachment.get("needs_page_hint") or 0)
@@ -141,12 +142,17 @@ def _project_readiness_summary(project: dict[str, Any]) -> dict[str, Any] | None
         + int(scoring.get("needs_bidder_evidence") or 0)
         + int(scoring.get("missing_evidence") or 0)
     )
-    blocking_statuses = {"blocked", "needs_completion", "needs_index"}
+    commercial_gap = (
+        int(commercial.get("needs_page_hint") or 0)
+        + int(commercial.get("tender_only") or 0)
+        + int(commercial.get("missing_evidence") or 0)
+    )
+    blocking_statuses = {"blocked", "needs_completion", "needs_index", "needs_bidder_evidence"}
     risk_statuses = {
         bucket.get("name", ""): bucket.get("status", "")
         for bucket in review.get("risk_buckets", [])
     }
-    needs_attention = attachment_gap or scoring_gap or any(status in blocking_statuses for status in risk_statuses.values())
+    needs_attention = attachment_gap or scoring_gap or commercial_gap or any(status in blocking_statuses for status in risk_statuses.values())
 
     return {
         "status": "needs_attention" if needs_attention else "ready",
@@ -157,6 +163,10 @@ def _project_readiness_summary(project: dict[str, Any]) -> dict[str, Any] | None
         "scoring_total": scoring.get("total", 0),
         "scoring_needs_page_hint": scoring.get("needs_page_hint", 0),
         "scoring_needs_bidder_evidence": scoring.get("needs_bidder_evidence", 0),
+        "commercial_ready": commercial.get("ready", 0),
+        "commercial_total": commercial.get("total", 0),
+        "commercial_needs_page_hint": commercial.get("needs_page_hint", 0),
+        "commercial_tender_only": commercial.get("tender_only", 0),
         "risk_statuses": risk_statuses,
     }
 
@@ -811,6 +821,19 @@ def _commercial_manual_check(requirement: str) -> str:
     return "复核商务响应、报价附件、合同附件和签章状态一致。"
 
 
+def _commercial_required_evidence(requirement: str) -> str:
+    text = _plain_requirement(requirement)
+    if "付款" in text or "发票" in text or "合同价款" in text:
+        return "投标人侧付款响应、发票承诺、合同条款确认和报价明细。"
+    if "履约保证金" in text:
+        return "履约保证金承诺函、保证金缴纳方式确认和签章页。"
+    if "报价" in text or "投标价格" in text:
+        return "开标一览表、投标报价明细、税率/币种确认和签章页。"
+    if "投标有效期" in text:
+        return "投标函、授权文件和有效期承诺页。"
+    return "投标人侧商务承诺、合同响应附件和签章材料。"
+
+
 def _evidence_refs(row: dict[str, Any]) -> str:
     refs = []
     for item in row["evidence"][:3]:
@@ -1091,12 +1114,61 @@ def _scoring_readiness(scoring_rows: list[dict[str, str]], attachment_readiness:
     }
 
 
+def _commercial_evidence_readiness(
+    commercial_rows: list[dict[str, str]],
+    attachment_readiness: dict[str, Any],
+) -> dict[str, Any]:
+    evidence_by_id = {item["evidence_id"]: item for item in attachment_readiness.get("records", [])}
+    rows: list[dict[str, Any]] = []
+    for row in commercial_rows:
+        evidence_ids = re.findall(r"EVID-\d+", row["evidence_ids"])
+        evidence_records = [evidence_by_id[evidence_id] for evidence_id in evidence_ids if evidence_id in evidence_by_id]
+        bidder_records = [item for item in evidence_records if item["status"] != "招标依据"]
+        tender_records = [item for item in evidence_records if item["status"] == "招标依据"]
+
+        if row["status"] == "missing_evidence" or not evidence_ids:
+            status = "missing_evidence"
+        elif not bidder_records:
+            status = "tender_only"
+        elif any(item["status"] == "需回填页码" for item in bidder_records):
+            status = "needs_page_hint"
+        else:
+            status = "ready"
+
+        rows.append(
+            {
+                "row_id": row["id"],
+                "requirement": row["requirement"],
+                "evidence_ids": evidence_ids,
+                "bidder_evidence_ids": [item["evidence_id"] for item in bidder_records],
+                "tender_evidence_ids": [item["evidence_id"] for item in tender_records],
+                "missing_bidder_evidence_ids": [
+                    item["evidence_id"] for item in bidder_records if item["status"] == "需回填页码"
+                ],
+                "status": status,
+                "required_evidence": _commercial_required_evidence(row["requirement"]),
+                "manual_check": _commercial_manual_check(row["requirement"]),
+            }
+        )
+
+    return {
+        "ready": sum(1 for row in rows if row["status"] == "ready"),
+        "total": len(rows),
+        "needs_page_hint": sum(1 for row in rows if row["status"] == "needs_page_hint"),
+        "tender_only": sum(1 for row in rows if row["status"] == "tender_only"),
+        "missing_evidence": sum(1 for row in rows if row["status"] == "missing_evidence"),
+        "rows": rows,
+        "not_ready_rows": [row for row in rows if row["status"] != "ready"],
+    }
+
+
 def _action_checklist(
     project: dict[str, Any],
     commercial_rows: list[dict[str, str]],
     missing_hard: list[dict[str, str]],
     attachment_readiness: dict[str, Any],
     scoring_readiness: dict[str, Any],
+    commercial_evidence_readiness: dict[str, Any],
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
 
@@ -1130,6 +1202,24 @@ def _action_checklist(
                 "复核报价、付款、履约保证金、发票类型和投标有效期口径，完成商务签核。",
                 "商务负责人",
                 [row["id"] for row in commercial_rows[:8]],
+            )
+        )
+
+    commercial_gaps = commercial_evidence_readiness.get("not_ready_rows", [])
+    if commercial_gaps:
+        row_ids = [row["row_id"] for row in commercial_gaps[:8]]
+        evidence_ids = [
+            evidence_id
+            for row in commercial_gaps
+            for evidence_id in row.get("missing_bidder_evidence_ids", [])
+        ][:8]
+        actions.append(
+            _review_action(
+                "medium",
+                "商务证据回填",
+                f"处理 {len(commercial_gaps)} 条报价/付款/保证金/发票响应的投标人侧证据签核缺口。",
+                "商务负责人",
+                _unique(row_ids + evidence_ids),
             )
         )
 
@@ -1194,6 +1284,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
         for row in hard_rows
         if any(keyword in row["requirement"] for keyword in ["报价", "付款", "履约保证金", "发票", "投标有效期"])
     ]
+    commercial_evidence_readiness = _commercial_evidence_readiness(commercial_rows, attachment_readiness)
     total_rows = len(data_rows)
     covered_rows = max(total_rows - len(missing_rows), 0)
 
@@ -1211,6 +1302,17 @@ def generate_review(project_id: str) -> dict[str, Any]:
                 "商务条款风险",
                 f"报价、付款、履约保证金等 {len(commercial_rows)} 条高风险商务条款已覆盖证据，但正式稿仍需复核金额、税率、发票类型和保证金口径。",
                 "由商务负责人对开标一览表、报价明细、合同付款条款和保证金承诺逐项签核。",
+                "商务条款风险",
+            )
+        )
+    if commercial_evidence_readiness["not_ready_rows"]:
+        sample = ", ".join(row["row_id"] for row in commercial_evidence_readiness["not_ready_rows"][:6])
+        findings.append(
+            _review_finding(
+                "medium",
+                "商务证据签核",
+                f"商务响应 {commercial_evidence_readiness['ready']}/{commercial_evidence_readiness['total']} 条达到投标人侧证据可签核状态，仍需处理：{sample}；仅招标依据 {commercial_evidence_readiness['tender_only']} 条，需回填页码/附件编号 {commercial_evidence_readiness['needs_page_hint']} 条。",
+                "补齐投标人侧报价、付款、保证金、发票或合同承诺材料；仅有招标依据时不得写成投标人已承诺。",
                 "商务条款风险",
             )
         )
@@ -1279,8 +1381,19 @@ def generate_review(project_id: str) -> dict[str, Any]:
         {
             "name": "商务条款风险",
             "severity": "medium",
-            "status": "needs_review" if commercial_rows else "clear",
-            "items": [f"{row['id']} {row['requirement']}：{row['evidence_ids']}" for row in commercial_rows]
+            "status": (
+                "needs_completion"
+                if commercial_evidence_readiness["tender_only"] or commercial_evidence_readiness["missing_evidence"]
+                else "needs_index"
+                if commercial_evidence_readiness["needs_page_hint"]
+                else "needs_review"
+                if commercial_rows
+                else "clear"
+            ),
+            "items": [
+                f"{row['row_id']} {row['status']}：{row['requirement']}；投标人侧 {', '.join(row['bidder_evidence_ids']) or '无'}；招标依据 {', '.join(row['tender_evidence_ids']) or '无'}"
+                for row in commercial_evidence_readiness["rows"]
+            ]
             or ["未提取到报价、付款、履约保证金等高风险商务条款。"],
         },
         {
@@ -1304,6 +1417,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
         missing_hard,
         attachment_readiness,
         scoring_readiness,
+        commercial_evidence_readiness,
     )
 
     review = {
@@ -1314,6 +1428,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
         },
         "attachment_readiness": attachment_readiness,
         "scoring_readiness": scoring_readiness,
+        "commercial_evidence_readiness": commercial_evidence_readiness,
         "material_groups": material_groups,
         "risk_buckets": risk_buckets,
         "action_checklist": action_checklist,
@@ -1337,6 +1452,7 @@ def _review_markdown(review: dict[str, Any]) -> str:
         f"- 硬性条款覆盖：{review['hard_clause_coverage']['covered']}/{review['hard_clause_coverage']['total']}",
         f"- 附件就绪度：{review['attachment_readiness']['ready']}/{review['attachment_readiness']['bidder_total']}",
         f"- 评分就绪度：{review['scoring_readiness']['ready']}/{review['scoring_readiness']['total']}",
+        f"- 商务证据签核：{review['commercial_evidence_readiness']['ready']}/{review['commercial_evidence_readiness']['total']}",
         "",
         "## 风险分桶",
         "",
@@ -1352,6 +1468,24 @@ def _review_markdown(review: dict[str, Any]) -> str:
         for item in bucket.get("items", []):
             lines.append(f"- {item}")
         lines.append("")
+
+    lines += [
+        "## 商务证据签核",
+        "",
+        f"- 投标人侧商务证据：{review['commercial_evidence_readiness']['ready']}/{review['commercial_evidence_readiness']['total']} 可签核",
+        f"- 仅招标依据：{review['commercial_evidence_readiness']['tender_only']}",
+        f"- 需回填页码/附件编号：{review['commercial_evidence_readiness']['needs_page_hint']}",
+        "",
+        "| 商务行 | 证据ID | 投标人侧证据 | 招标依据 | 就绪状态 | 签核要求 |",
+        "|---|---|---|---|---|---|",
+    ]
+    for item in review["commercial_evidence_readiness"]["rows"]:
+        lines.append(
+            f"| {_md_cell(item['row_id'] + ' ' + item['requirement'])} | {_md_cell(', '.join(item['evidence_ids']) or '待补充')} | {_md_cell(', '.join(item['bidder_evidence_ids']) or '无')} | {_md_cell(', '.join(item['tender_evidence_ids']) or '无')} | {_md_cell(item['status'])} | {_md_cell(item['manual_check'])} |"
+        )
+    if not review["commercial_evidence_readiness"]["rows"]:
+        lines.append("| 未识别 | 无 | 无 | 无 | not_applicable | 未识别报价、付款、履约保证金或发票类商务条款。 |")
+    lines.append("")
 
     lines += [
         "## 操作清单",
@@ -1445,8 +1579,10 @@ def _handoff_markdown(project: dict[str, Any], review: dict[str, Any]) -> str:
     material_groups = review.get("material_groups", [])
     attachment = review.get("attachment_readiness", {})
     scoring = review.get("scoring_readiness", {})
+    commercial = review.get("commercial_evidence_readiness", {})
     missing_records = attachment.get("missing_records", [])
     not_ready_rows = scoring.get("not_ready_rows", [])
+    commercial_not_ready = commercial.get("not_ready_rows", [])
     risk_statuses = {bucket.get("name", ""): bucket.get("status", "") for bucket in review.get("risk_buckets", [])}
 
     lines = [
@@ -1463,6 +1599,7 @@ def _handoff_markdown(project: dict[str, Any], review: dict[str, Any]) -> str:
         f"- Response Matrix 覆盖：{review['score_coverage']['covered']}/{review['score_coverage']['total']}",
         f"- 附件定位：{attachment.get('ready', 0)}/{attachment.get('bidder_total', 0)} 投标人侧证据可定位",
         f"- 评分就绪：{scoring.get('ready', 0)}/{scoring.get('total', 0)}",
+        f"- 商务证据签核：{commercial.get('ready', 0)}/{commercial.get('total', 0)}",
         f"- 风险状态：{'; '.join(f'{name}={status}' for name, status in risk_statuses.items())}",
         "",
         "## 剩余人工动作",
@@ -1494,6 +1631,11 @@ def _handoff_markdown(project: dict[str, Any], review: dict[str, Any]) -> str:
         "| 类型 | 对象 | 证据ID | 状态 | 处理要求 |",
         "|---|---|---|---|---|",
     ]
+    for item in commercial_not_ready:
+        evidence_ids = item.get("missing_bidder_evidence_ids") or item.get("bidder_evidence_ids") or item.get("tender_evidence_ids") or item.get("evidence_ids") or []
+        lines.append(
+            f"| 商务证据签核 | {_md_cell(item['row_id'])} | {_md_cell(', '.join(evidence_ids) or '待补投标人侧证据')} | {_md_cell(item['status'])} | {_md_cell(item['required_evidence'])} |"
+        )
     for item in missing_records:
         lines.append(
             f"| 附件定位 | {_md_cell(', '.join(item.get('row_ids') or []) or '未绑定行')} | {_md_cell(item['evidence_id'])} | {_md_cell(item.get('status', '需回填页码'))} | 回填页码、截图编号或附件文件名 |"
@@ -1502,7 +1644,7 @@ def _handoff_markdown(project: dict[str, Any], review: dict[str, Any]) -> str:
         lines.append(
             f"| 评分就绪 | {_md_cell(item['row_id'])} | {_md_cell(', '.join(item.get('missing_evidence_ids') or item.get('evidence_ids') or []) or '待补充')} | {_md_cell(item['status'])} | {_md_cell(item['manual_check'])} |"
         )
-    if not missing_records and not not_ready_rows:
+    if not commercial_not_ready and not missing_records and not not_ready_rows:
         lines.append("| 无 | 无 | 无 | ready | 暂无证据缺口 |")
 
     lines += [

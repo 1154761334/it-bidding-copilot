@@ -492,3 +492,33 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a review check that flags commercial response rows backed only by tender-side requirements, so bidder-side quotation or contract-commitment evidence can be backfilled before human signature.
+
+## 2026-05-08 Round 19
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `70/70`, project `63`, evidence trace length `70`.
+- Lowest item: review output had only a generic `商务复核` action. It did not separate tender-side commercial clauses from bidder-side quotation/contract evidence, so operators could not see which quotation, payment, guarantee, or invoice rows still needed bidder-side signature evidence or page/asset backfill.
+
+### Changes
+- Added `commercial_evidence_readiness` to review payloads, with per-row status, bidder-side evidence ids, tender-side evidence ids, missing bidder evidence ids, required evidence, and manual check guidance.
+- Added commercial readiness fields to project readiness summaries and `/bid` project list badges.
+- Added a dedicated `## 商务证据签核` section to `review.md`, including `投标人侧商务证据`, `仅招标依据`, and page/asset gap counts.
+- Added `商务证据回填` to the structured action checklist, with row ids and deduplicated evidence ids.
+- Added commercial evidence gaps to `handoff.md` so trial handoff highlights H1/H2/H3/H7/H8 as needing bidder-side commercial evidence location backfill.
+- Updated `/bid` Review tab with a `Commercial Evidence Readiness` panel showing signed, page/asset, and `tender_only` states.
+- Tightened `eval_bid_assistant.py` from 70 to 75 checks covering API payloads, review/handoff artifacts, and frontend rendering.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingReviewTab.tsx src/features/Bidding/BiddingWorkbench.tsx src/services/bidding.ts`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `75/75`, project `65`, evidence trace length `70`.
+- Artifact spot check: project `65` `review.md` shows `商务证据签核：1/6`, `商务证据回填`, H1-H8 commercial page-hint gaps tied to `EVID-42`, and `handoff.md` lists commercial evidence gaps for H1/H2/H3/H7/H8.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: expand review coverage for contract execution obligations such as service period, acceptance, breach liability, subcontracting/transfer, and contract signing conditions so non-pricing contract risks are not hidden behind generic commercial review.
