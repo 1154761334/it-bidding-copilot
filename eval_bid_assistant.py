@@ -775,6 +775,10 @@ def main() -> int:
                     "packageCommands",
                     "missingFromPackage",
                     "missingFromMatrix",
+                    "missingRequiredPackage",
+                    "REQUIRED_MATRIX_COMMANDS",
+                    "capture:bid-storage-state:prod",
+                    "smoke:bid-route:prod",
                     "BID_SMOKE_COMMAND_MATRIX_TEST_PASS",
                 ]
             )
@@ -807,6 +811,34 @@ def main() -> int:
                     "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
                     "BID_SMOKE_ACCEPTANCE_LOCAL_PASS",
                     "BID_ROUTE_SMOKE_PASS",
+                ]
+            ),
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route production command matrix is documented",
+            all(
+                token in frontend_bid_route_runbook
+                for token in [
+                    "## Production command matrix",
+                    "Capture storage state",
+                    "Smoke with captured state",
+                    "pnpm run capture:bid-storage-state:prod",
+                    "BID_ROUTE_STORAGE_STATE=.auth/bid-route-storage-state.json pnpm run smoke:bid-route:prod",
+                    "BID_ROUTE_LOGIN_REQUIRED",
+                    ".auth/bid-route-storage-state.json",
+                    "BID_ROUTE_SMOKE_PASS",
+                    "storage_state",
+                ]
+            )
+            and all(
+                token in frontend_bid_route_command_matrix_test
+                for token in [
+                    "## Production command matrix",
+                    "capture:bid-storage-state:prod",
+                    "smoke:bid-route:prod",
+                    "REQUIRED_MATRIX_COMMANDS",
                 ]
             ),
         )

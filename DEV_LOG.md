@@ -1083,3 +1083,37 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add frontend smoke docs/test coverage for production-route storage-state command selection so the same command matrix discipline covers local Next production checks.
+
+## 2026-05-08 Round 38
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `102/102`, project `149`, evidence trace length `94`.
+- Lowest item: production-route storage-state command selection had runbook commands, but the command matrix and executable self-test did not yet cover the local Next production route flow.
+
+### Changes
+- Added a production command matrix to `frontend/scripts/bidding/README.md` for capture and smoke scenarios on an already-running local Next production route.
+- Expanded `frontend/scripts/bidding/testBidSmokeCommandMatrix.mts` to parse both command matrix sections, require production capture/smoke commands, and fail if required commands are missing from either the runbook or `package.json`.
+- Tightened `eval_bid_assistant.py` from 102 to 103 checks by requiring the production command matrix, expected artifacts, and command matrix self-test coverage.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS, emitted `BID_SMOKE_COMMAND_MATRIX_TEST_PASS` and covered `capture:bid-storage-state:prod` plus `smoke:bid-route:prod`.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_ROUTE_SMOKE_SECRET_CHECK_PASS`, `BID_ROUTE_SMOKE_SECRET_TEST_PASS`, `BID_SMOKE_ACCEPTANCE_RUNNER_TEST_PASS`, `BID_SMOKE_COMMAND_MATRIX_TEST_PASS`, and `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm exec eslint scripts/bidding/testBidSmokeCommandMatrix.mts scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/runBidSmokeAcceptance.mts scripts/bidding/testBidSmokeAcceptanceRunner.mts scripts/bidding/testBidRouteSmokeSecrets.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `103/103`, project `150`, evidence trace length `94`.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+- `cd frontend && pnpm exec prettier --check scripts/bidding/README.md scripts/bidding/testBidSmokeCommandMatrix.mts`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_SMOKE_COMMAND_MATRIX_TEST_PASS`, `BID_ROUTE_SMOKE_PASS`, and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`; no FastAPI, Vite, or Next process remained afterward.
+
+### Artifacts
+- `pnpm run test:bid-smoke-command-matrix` now provides a service-free artifact that validates the bid smoke command contract across local acceptance and local Next production routes.
+- The production command matrix maps `capture:bid-storage-state:prod` to `.auth/bid-route-storage-state.json` capture and maps `smoke:bid-route:prod` to storage-state authenticated route smoke.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a CI-safe production-route docs test that validates the storage-state artifact path stays gitignored and command matrix examples keep environment names only.
