@@ -301,6 +301,101 @@ def _scoring_items(markdown: str) -> list[dict[str, str]]:
     return [{"name": name, "score": score, "rule": rule} for name, score, rule in candidates]
 
 
+MATERIAL_GROUP_ORDER = [
+    "qualification_documents",
+    "commercial_pricing_documents",
+    "technical_scoring_attachments",
+]
+
+MATERIAL_GROUPS = {
+    "qualification_documents": {
+        "label": "资格证明材料",
+        "owner": "商务负责人",
+        "binding_hint": "营业执照、授权、体系认证、业绩、人员资质按资格/资信附件组装订。",
+    },
+    "commercial_pricing_documents": {
+        "label": "商务报价材料",
+        "owner": "商务负责人",
+        "binding_hint": "开标一览表、报价明细、付款、发票和保证金承诺需与报价文件一致。",
+    },
+    "technical_scoring_attachments": {
+        "label": "技术评分附件",
+        "owner": "技术负责人",
+        "binding_hint": "技术方案、功能截图、架构图、团队实施材料按评分项交叉引用。",
+    },
+}
+
+
+def _material_group_key(text: str, row_type: str = "") -> str:
+    plain = _plain_requirement(text)
+    if any(keyword in plain for keyword in ["报价", "付款", "履约保证金", "发票", "开标一览", "投标价格", "合同价款"]):
+        return "commercial_pricing_documents"
+    if row_type == "technical_requirement":
+        return "technical_scoring_attachments"
+    if row_type == "scoring_item" and any(keyword in plain for keyword in ["技术方案", "技术指标", "实施", "团队", "整体架构"]):
+        return "technical_scoring_attachments"
+    if any(keyword in plain for keyword in ["营业执照", "授权", "ISO", "体系认证", "案例", "业绩", "资信", "PMP", "软考", "社保", "资质"]):
+        return "qualification_documents"
+    if any(keyword in plain for keyword in ["虚拟化", "分布式", "存储", "防火墙", "架构", "CDP", "服务编排", "截图"]):
+        return "technical_scoring_attachments"
+    return "qualification_documents" if row_type == "hard_clause" else "technical_scoring_attachments"
+
+
+def _material_group_meta(group_key: str) -> dict[str, str]:
+    return MATERIAL_GROUPS.get(group_key, MATERIAL_GROUPS["technical_scoring_attachments"])
+
+
+def _unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _material_group_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        group_key = row.get("material_group_key") or _material_group_key(row.get("requirement", ""), row.get("type", ""))
+        meta = _material_group_meta(group_key)
+        entry = grouped.setdefault(
+            group_key,
+            {
+                "key": group_key,
+                "label": meta["label"],
+                "owner": meta["owner"],
+                "binding_hint": meta["binding_hint"],
+                "row_ids": [],
+                "evidence_ids": [],
+                "missing_rows": [],
+            },
+        )
+        row_id = str(row.get("id") or row.get("row_id") or "")
+        if row_id:
+            entry["row_ids"].append(row_id)
+        evidence_ids = [item["evidence_id"] for item in row.get("evidence", [])]
+        if not evidence_ids:
+            evidence_ids = re.findall(r"EVID-\d+", str(row.get("evidence_ids") or ""))
+        entry["evidence_ids"].extend(evidence_ids)
+        if row.get("status") == "missing_evidence" or not evidence_ids:
+            entry["missing_rows"].append(row_id)
+
+    summaries: list[dict[str, Any]] = []
+    for group_key in MATERIAL_GROUP_ORDER:
+        if group_key not in grouped:
+            continue
+        entry = grouped[group_key]
+        entry["row_ids"] = _unique(entry["row_ids"])
+        entry["evidence_ids"] = _unique(entry["evidence_ids"])
+        entry["missing_rows"] = _unique(entry["missing_rows"])
+        entry["status"] = "needs_evidence" if entry["missing_rows"] else "covered"
+        summaries.append(entry)
+    return summaries
+
+
 def _query_for(text: str) -> str:
     rules = [
         ("实质性内容", "实质性 内容 明确响应 无效"),
@@ -315,6 +410,9 @@ def _query_for(text: str) -> str:
         ("案例", "相关业绩 合同 私有云 案例"),
         ("PMP", "PMP 高级软考 项目负责人证书"),
         ("软考", "PMP 高级软考 项目负责人证书"),
+        ("技术方案架构图", "私有云平台架构图 功能截图 拓扑图 技术方案"),
+        ("架构图", "私有云平台架构图 拓扑图 技术方案"),
+        ("功能截图", "功能截图 技术指标 截图"),
         ("等保", "等保三级 安全 微隔离 防火墙"),
         ("分布式存储", "分布式存储 块存储 可用容量"),
         ("防火墙", "虚拟防火墙 微隔离"),
@@ -350,13 +448,41 @@ def generate_plan(project_id: str, db: Session) -> dict[str, Any]:
         "ISO27001 信息安全管理体系认证",
         "近三年类似私有云建设项目合同案例",
         "项目经理 PMP 及高级软考证书",
+        "开标一览表和投标报价明细",
+        "付款方式及增值税专用发票响应",
+        "履约保证金承诺",
+        "技术方案架构图和功能截图",
     ]
     for name in material_checks:
+        group_key = _material_group_key(name)
+        group_meta = _material_group_meta(group_key)
         found = _find_evidence(db, name, top_k=2)
         status = "available" if found else "missing"
-        evidence_items.append({"name": name, "status": status, "evidence_ids": [e["evidence_id"] for e in found]})
+        evidence_items.append(
+            {
+                "name": name,
+                "status": status,
+                "material_group": group_meta["label"],
+                "material_group_key": group_key,
+                "owner": group_meta["owner"],
+                "evidence_ids": [e["evidence_id"] for e in found],
+            }
+        )
         if not found:
             missing_materials.append({"name": name, "status": "missing", "risk": "hard" if name != "ISO27001 信息安全管理体系认证" else "scoring"})
+    material_groups = _material_group_summary(
+        [
+            {
+                "id": item["name"],
+                "type": "material_check",
+                "requirement": item["name"],
+                "status": "covered" if item["status"] == "available" else "missing_evidence",
+                "material_group_key": item["material_group_key"],
+                "evidence_ids": ", ".join(item["evidence_ids"]),
+            }
+            for item in evidence_items
+        ]
+    )
 
     plan = {
         "project_info": {
@@ -372,6 +498,7 @@ def generate_plan(project_id: str, db: Session) -> dict[str, Any]:
         "scoring_items": scoring,
         "missing_materials": missing_materials,
         "evidence_items": evidence_items,
+        "material_groups": material_groups,
     }
     project["plan"] = plan
     project["stage"] = "planned"
@@ -399,7 +526,11 @@ def _plan_markdown(plan: dict[str, Any]) -> str:
     lines += ["", "## 证据检索"]
     for item in plan["evidence_items"]:
         ids = ", ".join(item["evidence_ids"]) or "无"
-        lines.append(f"- {item['name']}: {item['status']} ({ids})")
+        lines.append(f"- {item['name']} [{item['material_group']}]: {item['status']} ({ids})")
+    lines += ["", "## 材料包分工"]
+    for item in plan.get("material_groups", []):
+        ids = ", ".join(item["evidence_ids"]) or "待补充"
+        lines.append(f"- {item['label']}（{item['owner']}）：{item['status']}；证据 {ids}；{item['binding_hint']}")
     return "\n".join(lines) + "\n"
 
 
@@ -453,6 +584,7 @@ def generate_execution(project_id: str, db: Session) -> dict[str, Any]:
         "response_matrix_rows": len(rows),
         "scoring_table_rows": len(plan["scoring_items"]),
         "draft_sections": 4,
+        "material_groups": _material_group_summary(rows),
         "missing_materials": [{"name": row["requirement"], "status": "missing_evidence"} for row in rows if not row["evidence"]],
     }
     project["draft_sections"] = [
@@ -470,12 +602,17 @@ def generate_execution(project_id: str, db: Session) -> dict[str, Any]:
 
 def _matrix_row(db: Session, row_id: str, row_type: str, requirement: str, response_strategy: str) -> dict[str, Any]:
     evidence = _find_evidence(db, requirement, top_k=3)
+    group_key = _material_group_key(requirement, row_type)
+    group_meta = _material_group_meta(group_key)
     return {
         "id": row_id,
         "type": row_type,
         "requirement": _plain_requirement(requirement),
         "response_strategy": response_strategy,
         "evidence": evidence,
+        "material_group": group_meta["label"],
+        "material_group_key": group_key,
+        "material_owner": group_meta["owner"],
         "status": "covered" if evidence else "missing_evidence",
     }
 
@@ -492,6 +629,11 @@ def _matrix_markdown(rows: list[dict[str, Any]]) -> str:
         lines.append(
             f"| {_md_cell(row['id'])} | {_md_cell(row['type'])} | {_md_cell(row['requirement'])} | {_md_cell(row['response_strategy'])} | {_md_cell(ids)} | {_md_cell(row['status'])} |"
         )
+    lines += ["", "## 材料用途分组", ""]
+    for item in _material_group_summary(rows):
+        row_ids = ", ".join(item["row_ids"]) or "无"
+        evidence_ids = ", ".join(item["evidence_ids"]) or "待补充"
+        lines.append(f"- {item['label']}（{item['owner']}）：{item['status']}；条款 {row_ids}；证据 {evidence_ids}；{item['binding_hint']}")
     return "\n".join(lines) + "\n"
 
 
@@ -582,6 +724,20 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     lines += [
         "",
         "## 六、证据索引",
+        "",
+        "### 6.1 材料包视图",
+        "",
+        "| 材料包 | 责任人 | 涉及条款/评分项 | 证据ID | 装订提示 |",
+        "|---|---|---|---|---|",
+    ]
+    for item in _material_group_summary(rows):
+        lines.append(
+            f"| {_md_cell(item['label'])} | {_md_cell(item['owner'])} | {_md_cell(', '.join(item['row_ids']) or '无')} | {_md_cell(', '.join(item['evidence_ids']) or '待补充')} | {_md_cell(item['binding_hint'])} |"
+        )
+
+    lines += [
+        "",
+        "### 6.2 证据明细",
         "",
         "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |",
         "|---|---|---|---|---|---|",
@@ -966,6 +1122,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
     hard_rows = [row for row in data_rows if row["type"] == "hard_clause"]
     scoring_rows = [row for row in data_rows if row["type"] == "scoring_item"]
     scoring_readiness = _scoring_readiness(scoring_rows, attachment_readiness)
+    material_groups = _material_group_summary(data_rows)
     missing_hard = [row for row in missing_rows if row["type"] == "hard_clause"]
     missing_scoring = [row for row in missing_rows if row["type"] == "scoring_item"]
     commercial_rows = [
@@ -1093,6 +1250,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
         },
         "attachment_readiness": attachment_readiness,
         "scoring_readiness": scoring_readiness,
+        "material_groups": material_groups,
         "risk_buckets": risk_buckets,
         "action_checklist": action_checklist,
         "findings": findings,
@@ -1143,6 +1301,18 @@ def _review_markdown(review: dict[str, Any]) -> str:
         )
     if not review.get("action_checklist"):
         lines.append("| low | 暂无阻断项 | 项目经理 | review.md |")
+    lines.append("")
+
+    lines += [
+        "## 材料包复核",
+        "",
+        "| 材料包 | 责任人 | 涉及条款/评分项 | 状态 | 装订提示 |",
+        "|---|---|---|---|---|",
+    ]
+    for item in review.get("material_groups", []):
+        lines.append(
+            f"| {_md_cell(item['label'])} | {_md_cell(item['owner'])} | {_md_cell(', '.join(item['row_ids']) or '无')} | {_md_cell(item['status'])} | {_md_cell(item['binding_hint'])} |"
+        )
     lines.append("")
 
     lines += [

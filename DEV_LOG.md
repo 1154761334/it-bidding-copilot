@@ -351,3 +351,33 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: improve response matrix extraction so the plan/review can distinguish legal qualification documents,商务报价 documents, and technical scoring attachments before draft generation.
+
+## 2026-05-08 Round 14
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `51/51`, project `44`, evidence trace length `70`.
+- Lowest item: response matrix rows and review artifacts did not yet separate qualification documents, commercial pricing documents, and technical scoring attachments. Operators could see evidence and readiness, but not the material-package ownership before draft generation.
+
+### Changes
+- Added material-package classification across plan rows, response matrix rows, generated drafts, review payloads, and review Markdown.
+- Grouped rows into `资格证明材料`, `商务报价材料`, and `技术评分附件`, with owners, evidence ids, row ids, missing-row tracking, status, and binding hints.
+- Expanded plan material checks for opening price tables, quote details, payment/VAT invoice response, performance bond commitment, and technical architecture/screenshots.
+- Added material-package sections to `plan.md`, `response_matrix.md`, `draft.md`, and `review.md`.
+- Rendered material groups in `/bid` Review tab so reviewers can see ownership and involved row ids without opening Markdown.
+- Tightened `eval_bid_assistant.py` from 51 to 57 checks covering API material groups, all generated artifacts, and frontend rendering.
+- Narrowed the architecture/screenshot query rule after verification to avoid regressing scoring readiness while still covering technical scoring attachments.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingReviewTab.tsx`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `57/57`, project `47`, evidence trace length `70`.
+- Artifact spot check: project `47` `plan.md`, `response_matrix.md`, `draft.md`, `review.md`, and `project.json` all include the three material groups, with scoring readiness preserved at `4/5`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add material-group filters in `/bid` artifact and evidence panels so reviewers can drill into qualification, commercial, or technical evidence directly from the generated trace.

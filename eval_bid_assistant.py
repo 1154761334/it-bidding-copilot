@@ -139,6 +139,15 @@ def main() -> int:
             str(action_checklist[:1]),
         )
     )
+    material_groups = review_payload.get("material_groups") or []
+    checks.append(
+        check(
+            "project exposes material groups",
+            {item.get("label") for item in material_groups}
+            >= {"资格证明材料", "商务报价材料", "技术评分附件"},
+            str(material_groups),
+        )
+    )
 
     artifacts = set(demo_json.get("artifacts", []))
     required_artifacts = {"plan.md", "response_matrix.md", "draft.md", "review.md", "evidence_trace.json"}
@@ -193,9 +202,12 @@ def main() -> int:
     checks.append(check("draft maps technical notes to clause types", all(token in draft for token in ["一云多芯兼容性", "纠删码保护机制", "服务目录编排"])))
     checks.append(check("draft has scoring response checklist", all(token in draft for token in ["| 评分项 | 响应要点 | 证据定位 | 就绪状态 | 人工复核 |", "证书有效期", "合同金额", "团队人员证书"])))
     checks.append(check("draft has evidence index", "## 六、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |" in draft))
+    checks.append(check("draft has material package view", all(token in draft for token in ["### 6.1 材料包视图", "资格证明材料", "商务报价材料", "技术评分附件"])))
     checks.append(check("draft evidence index tracks attachment readiness", all(token in draft for token in ["页码/资产提示", "装订状态", "需回填页码"])))
     checks.append(check("draft avoids page placeholders", "第 **X** 页" not in draft and "第X页" not in draft))
     checks.append(check("draft avoids unsupported provided claims", "待补充对应证明材料，正式稿不得写成已提供" not in draft))
+    checks.append(check("plan has material package assignments", all(token in artifact_text["plan.md"] for token in ["## 材料包分工", "资格证明材料", "商务报价材料", "技术评分附件"])))
+    checks.append(check("matrix has material grouping", all(token in matrix for token in ["## 材料用途分组", "资格证明材料", "商务报价材料", "技术评分附件"])))
     checks.append(check("review flags coverage", "评分覆盖" in review and "硬性条款覆盖" in review))
     checks.append(check("review flags missing form risks", "签章与主体信息" in review and "材料索引" in review))
     checks.append(check("review has attachment readiness", all(token in review for token in ["## 附件就绪度", "投标人侧证据", "装订状态"])))
@@ -206,6 +218,7 @@ def main() -> int:
             all(token in review for token in ["## 操作清单", "责任人", "附件定位", "评分定位"]),
         )
     )
+    checks.append(check("review has material group review", all(token in review for token in ["## 材料包复核", "资格证明材料", "商务报价材料", "技术评分附件"])))
     checks.append(
         check(
             "review has actionable risk buckets",
@@ -280,6 +293,7 @@ def main() -> int:
             all(token in frontend_review_tab for token in ["action_checklist", "Action Checklist", "owner"]),
         )
     )
+    checks.append(check("frontend review tab shows material groups", all(token in frontend_review_tab for token in ["material_groups", "Material Groups", "row_ids"])))
     checks.append(check("frontend review tab shows risk buckets", all(token in frontend_review_tab for token in ["risk_buckets", "Risk Buckets", "bucket.status"])))
 
     passed = sum(1 for item in checks if item["ok"])
