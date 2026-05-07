@@ -844,3 +844,37 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a lightweight CI-safe static check that fails if future bidding smoke docs or diagnostics start including credential-shaped literal values instead of environment variable names.
+
+## 2026-05-08 Round 31
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `95/95`, project `113`, evidence trace length `94`.
+- Lowest item: the non-secret bidding smoke convention was documented, but there was no executable CI-safe guard to fail if future docs or smoke diagnostics accidentally include credential-shaped literal values instead of environment variable names.
+
+### Changes
+- Added `frontend/scripts/bidding/checkBidRouteSmokeSecrets.mts` to scan bidding smoke docs, package smoke/bid scripts, and route smoke helpers for credential-shaped literals.
+- The checker emits `BID_ROUTE_SMOKE_SECRET_CHECK_PASS` or `BID_ROUTE_SMOKE_SECRET_CHECK_FAIL`, and failure findings are redacted before logging.
+- Added the `check:bid-smoke-secrets` package script.
+- Tightened `eval_bid_assistant.py` from 95 to 96 checks by requiring the executable secret guard and package entrypoint.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `96/96`, project `117`, evidence trace length `94`.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS, emitted `BID_ROUTE_SMOKE_SECRET_CHECK_PASS`.
+- `cd frontend && pnpm exec eslint scripts/bidding/checkBidRouteSmokeSecrets.mts scripts/bidding/captureBidRouteStorageState.mts scripts/bidding/smokeBidRoute.mts`: PASS.
+- `cd frontend && pnpm exec prettier --check package.json scripts/bidding/README.md scripts/bidding/checkBidRouteSmokeSecrets.mts`: PASS.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run smoke:bid-route`: PASS against `http://127.0.0.1:9876/bid`, API status `ok`, evidence count `253`, auth mode `not_required`; temporary FastAPI and SPA dev servers were stopped after the smoke.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Artifacts
+- `pnpm run check:bid-smoke-secrets` now provides a lightweight static acceptance artifact for the bidding smoke/runbook secret boundary.
+- Guard failure logs include only file, line, rule, and redacted excerpts.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a small fixture-based check for the guard's failure mode without storing any credential-like literal directly in tracked files.

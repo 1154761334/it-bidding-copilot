@@ -435,6 +435,7 @@ def main() -> int:
     frontend_bid_route_smoke = read_repo_text("frontend/scripts/bidding/smokeBidRoute.mts")
     frontend_bid_route_storage_capture = read_repo_text("frontend/scripts/bidding/captureBidRouteStorageState.mts")
     frontend_bid_route_runbook = read_repo_text("frontend/scripts/bidding/README.md")
+    frontend_bid_route_secret_check = read_repo_text("frontend/scripts/bidding/checkBidRouteSmokeSecrets.mts")
     frontend_gitignore = read_repo_text("frontend/.gitignore")
     frontend_package_json = read_repo_text("frontend/package.json")
     frontend_evidence_tab = read_repo_text("frontend/src/features/Bidding/BiddingEvidenceTab.tsx")
@@ -636,6 +637,23 @@ def main() -> int:
                     "do not write secret values",
                 ]
             ),
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid route smoke secret guard is executable",
+            all(
+                token in frontend_bid_route_secret_check
+                for token in [
+                    "TARGET_FILES",
+                    "BID_ROUTE_SMOKE_SECRET_CHECK_PASS",
+                    "BID_ROUTE_SMOKE_SECRET_CHECK_FAIL",
+                    "credential literal",
+                    "redact",
+                    "process.exit(1)",
+                ]
+            )
+            and "check:bid-smoke-secrets" in frontend_package_json,
         )
     )
     checks.append(
