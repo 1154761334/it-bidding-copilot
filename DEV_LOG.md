@@ -267,3 +267,31 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a compact scoring readiness summary to the Review tab once scoring readiness is exposed in the review API payload.
+
+## 2026-05-08 Round 11
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `44/44`, project `31`, evidence trace length `70`.
+- Lowest item: `draft.md` already had scoring-row readiness, and `/bid` Review tab showed attachment readiness, but the generated review API payload and `review.md` did not summarize scoring readiness. Reviewers could not see which scoring items were ready versus blocked by bidder-side page/asset backfill without reading the draft checklist.
+
+### Changes
+- Added `scoring_readiness` to the review API payload, derived from scoring rows and attachment readiness records.
+- Added a `## 评分就绪度` section to `review.md` with ready count, missing page/asset count, bidder-evidence gap count, evidence ids, status, and manual review prompts per scoring item.
+- Updated the 评分点风险 bucket and findings so scoring rows that have evidence but lack bidder-side page/asset positioning are reported as actionable `needs_page_hint` issues.
+- Added a Scoring Readiness summary to `/bid` Review tab with ready, page/asset, bidder-evidence badges and the first not-ready scoring rows.
+- Tightened `eval_bid_assistant.py` from 44 to 46 checks covering review Markdown scoring readiness and frontend scoring-readiness rendering.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingReviewTab.tsx`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `46/46`, project `32`, evidence trace length `70`.
+- Artifact spot check: project `32` `review.md` reports `评分就绪度：4/5`; S3 is `needs_page_hint` because bidder evidence `EVID-74` still needs page or asset positioning.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash environment-variable and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: expose scoring and attachment readiness in project list/detail summaries so users can triage projects before opening each artifact.

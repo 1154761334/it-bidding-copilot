@@ -794,6 +794,45 @@ def _attachment_readiness(trace: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _scoring_readiness(scoring_rows: list[dict[str, str]], attachment_readiness: dict[str, Any]) -> dict[str, Any]:
+    evidence_by_id = {item["evidence_id"]: item for item in attachment_readiness.get("records", [])}
+    rows: list[dict[str, Any]] = []
+    for row in scoring_rows:
+        evidence_ids = re.findall(r"EVID-\d+", row["evidence_ids"])
+        evidence_records = [evidence_by_id[evidence_id] for evidence_id in evidence_ids if evidence_id in evidence_by_id]
+        bidder_records = [item for item in evidence_records if item["status"] != "招标依据"]
+
+        if row["status"] == "missing_evidence" or not evidence_ids:
+            status = "missing_evidence"
+        elif not bidder_records:
+            status = "needs_bidder_evidence"
+        elif any(item["status"] == "需回填页码" for item in bidder_records):
+            status = "needs_page_hint"
+        else:
+            status = "ready"
+
+        rows.append(
+            {
+                "row_id": row["id"],
+                "requirement": row["requirement"],
+                "evidence_ids": evidence_ids,
+                "status": status,
+                "manual_check": _scoring_manual_check(row["requirement"]),
+                "missing_evidence_ids": [item["evidence_id"] for item in bidder_records if item["status"] == "需回填页码"],
+            }
+        )
+
+    return {
+        "ready": sum(1 for row in rows if row["status"] == "ready"),
+        "total": len(rows),
+        "needs_page_hint": sum(1 for row in rows if row["status"] == "needs_page_hint"),
+        "needs_bidder_evidence": sum(1 for row in rows if row["status"] == "needs_bidder_evidence"),
+        "missing_evidence": sum(1 for row in rows if row["status"] == "missing_evidence"),
+        "rows": rows,
+        "not_ready_rows": [row for row in rows if row["status"] != "ready"],
+    }
+
+
 def generate_review(project_id: str) -> dict[str, Any]:
     project = get_project_record(project_id)
     matrix_text = read_artifact_text(project_id, "response_matrix.md")
@@ -805,6 +844,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
     missing_rows = [row for row in data_rows if row["status"] == "missing_evidence"]
     hard_rows = [row for row in data_rows if row["type"] == "hard_clause"]
     scoring_rows = [row for row in data_rows if row["type"] == "scoring_item"]
+    scoring_readiness = _scoring_readiness(scoring_rows, attachment_readiness)
     missing_hard = [row for row in missing_rows if row["type"] == "hard_clause"]
     missing_scoring = [row for row in missing_rows if row["type"] == "scoring_item"]
     commercial_rows = [
@@ -840,6 +880,17 @@ def generate_review(project_id: str) -> dict[str, Any]:
                 "评分点风险",
                 "评分点均有 evidence_id，但正式附件目录仍需按评分细则逐项映射，避免评委无法快速定位得分材料。",
                 "在装订稿中按评分项回填附件页码，并与证据索引交叉校验。",
+                "评分点风险",
+            )
+        )
+    if scoring_readiness["not_ready_rows"]:
+        sample = ", ".join(row["row_id"] for row in scoring_readiness["not_ready_rows"][:5])
+        findings.append(
+            _review_finding(
+                "medium",
+                "评分就绪度",
+                f"评分项 {scoring_readiness['ready']}/{scoring_readiness['total']} 已达到附件可定位状态，仍需处理：{sample}。",
+                "按评分清单补齐投标人侧证明、页码或截图编号，并由商务/技术负责人签核。",
                 "评分点风险",
             )
         )
@@ -893,8 +944,10 @@ def generate_review(project_id: str) -> dict[str, Any]:
         {
             "name": "评分点风险",
             "severity": "medium",
-            "status": "blocked" if missing_scoring else "needs_index",
-            "items": [f"{row['id']} {row['requirement']}" for row in missing_scoring] or ["评分点均已覆盖，需在正式附件目录中回填页码。"],
+            "status": "blocked" if missing_scoring else "needs_index" if scoring_readiness["not_ready_rows"] else "clear",
+            "items": [f"{row['id']} {row['requirement']}" for row in missing_scoring]
+            or [f"{row['row_id']} {row['status']}：{row['requirement']}" for row in scoring_readiness["not_ready_rows"]]
+            or ["评分点均已覆盖，且投标人侧证据已达到可定位状态。"],
         },
         {
             "name": "签章与材料风险",
@@ -911,6 +964,7 @@ def generate_review(project_id: str) -> dict[str, Any]:
             "total": len(hard_rows),
         },
         "attachment_readiness": attachment_readiness,
+        "scoring_readiness": scoring_readiness,
         "risk_buckets": risk_buckets,
         "findings": findings,
     }
@@ -929,6 +983,7 @@ def _review_markdown(review: dict[str, Any]) -> str:
         f"- 评分覆盖：{review['score_coverage']['covered']}/{review['score_coverage']['total']}",
         f"- 硬性条款覆盖：{review['hard_clause_coverage']['covered']}/{review['hard_clause_coverage']['total']}",
         f"- 附件就绪度：{review['attachment_readiness']['ready']}/{review['attachment_readiness']['bidder_total']}",
+        f"- 评分就绪度：{review['scoring_readiness']['ready']}/{review['scoring_readiness']['total']}",
         "",
         "## 风险分桶",
         "",
@@ -957,6 +1012,22 @@ def _review_markdown(review: dict[str, Any]) -> str:
     for item in review["attachment_readiness"]["records"]:
         lines.append(
             f"| {_md_cell(item['evidence_id'])} | {_md_cell(', '.join(item['row_ids']))} | {_md_cell(item['source_doc'])} | {_md_cell(item['page_or_asset'] or '需回填页码')} | {_md_cell(item['status'])} |"
+        )
+
+    lines += [
+        "",
+        "## 评分就绪度",
+        "",
+        f"- 评分项就绪：{review['scoring_readiness']['ready']}/{review['scoring_readiness']['total']}",
+        f"- 需回填页码/附件编号：{review['scoring_readiness']['needs_page_hint']}",
+        f"- 需补投标人材料：{review['scoring_readiness']['needs_bidder_evidence']}",
+        "",
+        "| 评分项 | 证据ID | 就绪状态 | 人工复核 |",
+        "|---|---|---|---|",
+    ]
+    for item in review["scoring_readiness"]["rows"]:
+        lines.append(
+            f"| {_md_cell(item['row_id'] + ' ' + item['requirement'])} | {_md_cell(', '.join(item['evidence_ids']) or '待补充')} | {_md_cell(item['status'])} | {_md_cell(item['manual_check'])} |"
         )
 
     lines += [

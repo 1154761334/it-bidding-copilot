@@ -170,6 +170,7 @@ def main() -> int:
     checks.append(check("review flags coverage", "评分覆盖" in review and "硬性条款覆盖" in review))
     checks.append(check("review flags missing form risks", "签章与主体信息" in review and "材料索引" in review))
     checks.append(check("review has attachment readiness", all(token in review for token in ["## 附件就绪度", "投标人侧证据", "装订状态"])))
+    checks.append(check("review has scoring readiness", all(token in review for token in ["## 评分就绪度", "评分项就绪", "需补投标人材料"])))
     checks.append(
         check(
             "review has actionable risk buckets",
@@ -223,6 +224,7 @@ def main() -> int:
     )
     checks.append(check("frontend evidence panel shows asset paths", all(token in frontend_draft_tab for token in ["asset_paths", "Asset paths"])))
     checks.append(check("frontend review tab shows attachment readiness", all(token in frontend_review_tab for token in ["attachment_readiness", "Attachment Readiness", "needs_page_hint"])))
+    checks.append(check("frontend review tab shows scoring readiness", all(token in frontend_review_tab for token in ["scoring_readiness", "Scoring Readiness", "needs_bidder_evidence"])))
     checks.append(check("frontend review tab shows risk buckets", all(token in frontend_review_tab for token in ["risk_buckets", "Risk Buckets", "bucket.status"])))
 
     passed = sum(1 for item in checks if item["ok"])
