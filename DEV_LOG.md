@@ -1575,3 +1575,47 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a service-free negative fixture for the preflight summary terminal artifact so id/source/command drift fails with targeted diagnostics before the preflight order guard runs.
+
+## 2026-05-08 Round 50
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `114/114`, project `206`, evidence trace length `94`.
+- Lowest item: the preflight summary guard validated terminal artifact id/source/command in the positive path, but its failure fixture only covered missing runbook statuses and missing preflight commands.
+
+### Changes
+- Extended `frontend/scripts/bidding/testBidSmokePreflightSummaryFailure.mts` with a typed manifest fixture path that clones the compact acceptance manifest at runtime.
+- Added terminal artifact negative fixtures for `terminal_artifact_id`, `terminal_artifact_source`, and `terminal_artifact_command`, each requiring the targeted summary diagnostic before a pass status can be emitted.
+- Reset package/runbook fixtures between failure cases so the terminal drift cases isolate manifest identity drift only.
+- Updated `frontend/scripts/bidding/README.md` to document that the preflight summary failure guard covers terminal artifact identity drift.
+- Tightened `eval_bid_assistant.py` from 114 to 115 checks by requiring the terminal drift fixture labels, diagnostics, and concrete drift values.
+
+### Verification
+- `cd backend && venv/bin/python -m py_compile ../eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec prettier --write scripts/bidding/README.md scripts/bidding/testBidSmokePreflightSummaryFailure.mts`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary-failure`: PASS, emitted `terminal_artifact_id`, `terminal_artifact_source`, and `terminal_artifact_command` under `BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS`.
+- `cd frontend && pnpm run test:bid-smoke-preflight-summary`: PASS, emitted top-level `terminal_artifact` with `preflight_port_guard`, `scripts/bidding/runBidSmokeAcceptance.mts`, and `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `115/115`, project `207`, evidence trace length `94`.
+- `cd frontend && pnpm run test:bid-smoke-acceptance-manifest`: PASS.
+- `cd frontend && pnpm run test:bid-smoke-command-matrix`: PASS.
+- `cd frontend && pnpm run check:bid-smoke-secrets`: PASS.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm exec eslint ...`: PASS for the bid smoke scripts touched and referenced in this round.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted the expanded preflight summary failure cases before `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm exec prettier --check ...`: PASS for package/runbook/manifest and touched bid smoke scripts.
+- `cd frontend && pnpm run build > /tmp/frontend-build-round50.log 2>&1`: PASS. Build still prints warning-level chunk/dynamic-import output, but exits 0.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS, emitted `BID_ROUTE_SMOKE_PASS` and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`.
+- `pgrep -af '[u]vicorn|[v]ite|[n]ext' || true`: PASS, no matching processes remained after local acceptance.
+- `git diff --check` and `git -C frontend diff --check`: PASS.
+- Final `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `115/115`, project `210`, evidence trace length `94`.
+
+### Artifacts
+- `pnpm run test:bid-smoke-preflight-summary-failure` now emits five failure cases: runbook status, preflight command, terminal artifact id, terminal artifact source, and terminal artifact command.
+- The failure fixture now proves terminal summary id/source/command drift fails with targeted diagnostics and does not emit `BID_SMOKE_PREFLIGHT_SUMMARY_TEST_PASS`.
+- `acceptance:bid-smoke:preflight` now catches terminal summary identity drift before the manifest-derived preflight order guard and final port readiness.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add a compact machine-readable schema/version assertion for the preflight summary output itself, or add summary failure fixtures for missing/duplicated terminal artifacts before relying on the order guard.

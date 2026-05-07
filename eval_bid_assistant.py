@@ -957,7 +957,9 @@ def main() -> int:
                     "Preflight package script does not invoke test:bid-smoke-preflight-summary.",
                     "BID_SMOKE_PREFLIGHT_SUMMARY_STATUS_MISSING",
                     "test:bid-smoke-preflight-summary-missing",
-                    "failure_cases: ['runbook_status', 'preflight_command']",
+                    "terminal_artifact_id",
+                    "terminal_artifact_source",
+                    "terminal_artifact_command",
                 ]
             )
             and "test:bid-smoke-preflight-summary-failure" in frontend_package_json
@@ -965,6 +967,25 @@ def main() -> int:
             and "BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS" in frontend_bid_route_runbook
             and "BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS" in frontend_bid_route_acceptance_manifest
             and "testBidSmokePreflightSummaryFailure.mts" in frontend_bid_route_secret_check,
+        )
+    )
+    checks.append(
+        check(
+            "frontend bid smoke preflight summary terminal drift fixture",
+            all(
+                token in frontend_bid_route_preflight_summary_failure_test
+                for token in [
+                    "terminal_artifact_id",
+                    "terminal_artifact_source",
+                    "terminal_artifact_command",
+                    "Summary terminal artifact id drifted.",
+                    "Summary terminal artifact source drifted.",
+                    "Summary terminal artifact command drifted.",
+                    "preflight_port_guard_drift",
+                    "scripts/bidding/smokeBidRoute.mts",
+                    "BID_ACCEPTANCE_PREFLIGHT_ONLY=0",
+                ]
+            ),
         )
     )
     checks.append(
