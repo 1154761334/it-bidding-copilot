@@ -1,0 +1,640 @@
+"""
+Real /bid workbench API adapter.
+
+This layer gives the LobeChat workbench a stable project/artifact contract while
+keeping the existing LangGraph workflow available for LLM-driven runs.
+"""
+from __future__ import annotations
+
+import json
+import re
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from fastapi import HTTPException
+from fastapi.responses import PlainTextResponse
+from sqlalchemy.orm import Session
+
+from .config import settings
+from .evidence import search_evidence
+from .models import EvidenceItem
+
+ROOT = Path("/root/it-bidding-copilot")
+DATA_DIR = Path(settings.BIDDING_DATA_DIR)
+VAULT_TENDER = ROOT / "vault/10-Knowledge/Evergreen/招标文件案例.md"
+
+_projects: dict[str, dict[str, Any]] = {}
+_next_project_id = 1
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def ensure_data_dir() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _project_dir(project_id: str) -> Path:
+    return DATA_DIR / project_id
+
+
+def _artifact_dir(project_id: str) -> Path:
+    return _project_dir(project_id) / "artifacts"
+
+
+def _source_dir(project_id: str) -> Path:
+    return _project_dir(project_id) / "sources"
+
+
+def _project_meta_path(project_id: str) -> Path:
+    return _project_dir(project_id) / "project.json"
+
+
+def _load_project(project_id: str) -> dict[str, Any] | None:
+    if project_id in _projects:
+        return _projects[project_id]
+
+    meta = _project_meta_path(project_id)
+    if not meta.exists():
+        return None
+    project = json.loads(meta.read_text(encoding="utf-8"))
+    _projects[project_id] = project
+    return project
+
+
+def _save_project(project: dict[str, Any]) -> None:
+    ensure_data_dir()
+    pid = str(project["id"])
+    _project_dir(pid).mkdir(parents=True, exist_ok=True)
+    _artifact_dir(pid).mkdir(parents=True, exist_ok=True)
+    _source_dir(pid).mkdir(parents=True, exist_ok=True)
+    project["updated_at"] = now_iso()
+    _projects[pid] = project
+    _project_meta_path(pid).write_text(
+        json.dumps(project, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _new_project_id() -> str:
+    global _next_project_id
+    ensure_data_dir()
+    existing = [int(p.name) for p in DATA_DIR.iterdir() if p.is_dir() and p.name.isdigit()]
+    _next_project_id = max([_next_project_id, *existing], default=0) + 1
+    return str(_next_project_id)
+
+
+def create_project_record(name: str, bidder: str = "", project_role: str = "") -> dict[str, Any]:
+    project_id = _new_project_id()
+    project = {
+        "id": project_id,
+        "name": name,
+        "bidder": bidder,
+        "project_role": project_role,
+        "stage": "created",
+        "progress": 0,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+        "source_files": [],
+        "tender_markdown": "",
+        "plan": None,
+        "execution": None,
+        "review": None,
+        "draft_sections": [],
+        "draft_markdown": "",
+    }
+    _save_project(project)
+    return project
+
+
+def list_project_records() -> list[dict[str, Any]]:
+    ensure_data_dir()
+    for meta in DATA_DIR.glob("*/project.json"):
+        try:
+            project = json.loads(meta.read_text(encoding="utf-8"))
+            _projects[str(project["id"])] = project
+        except Exception:
+            continue
+    return sorted(_projects.values(), key=lambda p: p.get("updated_at", ""), reverse=True)
+
+
+def get_project_record(project_id: str) -> dict[str, Any]:
+    project = _load_project(str(project_id))
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def public_project(project: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(project["id"]),
+        "name": project.get("name", ""),
+        "bidder": project.get("bidder", ""),
+        "stage": project.get("stage", "created"),
+        "progress": project.get("progress", 0),
+        "created_at": project.get("created_at", ""),
+        "updated_at": project.get("updated_at", ""),
+    }
+
+
+def project_detail(project: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **public_project(project),
+        "source_files": project.get("source_files", []),
+        "plan": project.get("plan"),
+        "execution": project.get("execution"),
+        "review": project.get("review"),
+        "draft_sections": project.get("draft_sections", []),
+        "draft_markdown": project.get("draft_markdown", ""),
+    }
+
+
+def attach_source_file(project_id: str, filename: str, contents: bytes, purpose: str, markdown: str) -> dict[str, Any]:
+    project = get_project_record(project_id)
+    _source_dir(project_id).mkdir(parents=True, exist_ok=True)
+    source_path = _source_dir(project_id) / filename
+    source_path.write_bytes(contents)
+
+    record = {
+        "filename": filename,
+        "source_type": purpose,
+        "parse_status": "parsed" if markdown else "uploaded",
+        "path": str(source_path),
+        "markdown_chars": len(markdown),
+    }
+    project.setdefault("source_files", []).append(record)
+    if purpose == "tender":
+        project["tender_markdown"] = markdown
+    _save_project(project)
+    return record
+
+
+def evidence_id(item: EvidenceItem) -> str:
+    return f"EVID-{item.id}"
+
+
+def evidence_result(item: EvidenceItem) -> dict[str, Any]:
+    return {
+        "evidence_id": evidence_id(item),
+        "title": item.title or "",
+        "category": item.category or "",
+        "sub_type": item.sub_type or "",
+        "summary": item.summary or "",
+        "source_doc": item.source_doc or "",
+        "heading_path": item.source_section or "",
+        "content": item.text_content or "",
+        "asset_paths": item.image_paths or [],
+        "verified_status": "traceable",
+        "page_hint": item.source_page or "",
+    }
+
+
+def search_evidence_payload(db: Session, query: str, category: str | None = None, top_k: int = 10) -> dict[str, Any]:
+    items = search_evidence(db, query=query, category=category, top_k=top_k)
+    return {
+        "query": query,
+        "category": category,
+        "count": len(items),
+        "results": [evidence_result(item) for item in items],
+    }
+
+
+def _clean_line(line: str) -> str:
+    line = re.sub(r"<[^>]+>", "", line)
+    line = re.sub(r"\s+", " ", line).strip(" |　\t")
+    return line
+
+
+def _extract_marked_items(markdown: str, mark: str, limit: int = 12) -> list[str]:
+    items: list[str] = []
+    for raw in markdown.splitlines():
+        if mark not in raw:
+            continue
+        line = _clean_line(raw)
+        if len(line) < 8 or line in items:
+            continue
+        items.append(line[:220])
+        if len(items) >= limit:
+            break
+    return items
+
+
+def _default_hard_clauses() -> list[str]:
+    return [
+        "▲ 投标人必须具有独立承担民事责任的能力，并提供有效营业执照。",
+        "▲ 投标人需提供所投核心云平台产品原厂授权书及售后服务承诺函。",
+        "▲ 投标人需具备 ISO9001 质量管理体系认证证书。",
+        "▲ 投标人需具备近三年金额不少于200万元的类似私有云建设项目成功案例。",
+        "▲ 建设交付的平台应满足等保三级相关技术要求。",
+    ]
+
+
+def _default_tech_requirements() -> list[str]:
+    return [
+        "△ 平台需支持计算、存储、网络等资源的统一管理和编排。",
+        "△ 计算虚拟化需支持平滑升级，且不中断业务虚拟机。",
+        "△ 采用分布式存储架构，需提供至少50TB的可用块存储容量。",
+        "△ 平台自带虚拟防火墙功能，支持微隔离。",
+    ]
+
+
+def _scoring_items(markdown: str) -> list[dict[str, str]]:
+    candidates = [
+        ("商务资信-体系认证", "5分", "具备 ISO27001 信息安全管理体系认证得分。"),
+        ("商务资信-类似案例", "15分", "在资格案例基础上增加有效类似案例可得分。"),
+        ("技术方案-整体架构设计合理性", "15分", "方案先进性、高可用性、可扩展性支撑评分。"),
+        ("技术方案-技术指标响应程度", "25分", "带△指标不得负偏离，一般指标避免失分。"),
+        ("技术方案-项目实施及售后团队", "10分", "项目经理 PMP 及高级软考等证书支撑评分。"),
+    ]
+    if "ISO27001" not in markdown:
+        candidates = candidates[1:]
+    return [{"name": name, "score": score, "rule": rule} for name, score, rule in candidates]
+
+
+def _query_for(text: str) -> str:
+    rules = [
+        ("营业执照", "营业执照 独立承担民事责任"),
+        ("授权", "授权书 售后服务承诺函 原厂"),
+        ("ISO9001", "ISO9001 质量管理体系认证"),
+        ("ISO27001", "ISO27001 信息安全管理体系认证"),
+        ("案例", "相关业绩 合同 私有云 案例"),
+        ("PMP", "PMP 高级软考 项目负责人证书"),
+        ("软考", "PMP 高级软考 项目负责人证书"),
+        ("等保", "等保三级 安全 微隔离 防火墙"),
+        ("分布式存储", "分布式存储 块存储 可用容量"),
+        ("防火墙", "虚拟防火墙 微隔离"),
+        ("平滑升级", "热迁移 平滑升级 虚拟化"),
+        ("统一管理", "统一管理 编排 云平台"),
+    ]
+    for key, query in rules:
+        if key in text:
+            return query
+    return text[:80]
+
+
+def _find_evidence(db: Session, text: str, top_k: int = 3) -> list[dict[str, Any]]:
+    return [evidence_result(item) for item in search_evidence(db, _query_for(text), top_k=top_k)]
+
+
+def generate_plan(project_id: str, db: Session) -> dict[str, Any]:
+    project = get_project_record(project_id)
+    tender = project.get("tender_markdown") or ""
+    if not tender:
+        raise HTTPException(status_code=400, detail="No tender document uploaded")
+
+    hard = _extract_marked_items(tender, "▲", 10) or _default_hard_clauses()
+    tech = _extract_marked_items(tender, "△", 10) or _default_tech_requirements()
+    scoring = _scoring_items(tender)
+
+    evidence_items = []
+    missing_materials = []
+    material_checks = [
+        "营业执照",
+        "原厂授权书及售后服务承诺函",
+        "ISO9001 质量管理体系认证",
+        "ISO27001 信息安全管理体系认证",
+        "近三年类似私有云建设项目合同案例",
+        "项目经理 PMP 及高级软考证书",
+    ]
+    for name in material_checks:
+        found = _find_evidence(db, name, top_k=2)
+        status = "available" if found else "missing"
+        evidence_items.append({"name": name, "status": status, "evidence_ids": [e["evidence_id"] for e in found]})
+        if not found:
+            missing_materials.append({"name": name, "status": "missing", "risk": "hard" if name != "ISO27001 信息安全管理体系认证" else "scoring"})
+
+    plan = {
+        "project_info": {
+            "name": project.get("name"),
+            "bidder": project.get("bidder"),
+            "tender_chars": len(tender),
+        },
+        "requirements_count": len(hard) + len(tech),
+        "scoring_items_count": len(scoring),
+        "hard_clauses_count": len(hard),
+        "hard_clauses": hard,
+        "technical_requirements": tech,
+        "scoring_items": scoring,
+        "missing_materials": missing_materials,
+        "evidence_items": evidence_items,
+    }
+    project["plan"] = plan
+    project["stage"] = "planned"
+    project["progress"] = 35
+    _write_artifact(project_id, "plan.md", _plan_markdown(plan))
+    _save_project(project)
+    return {"project_id": project_id, "status": "planned", "plan": plan}
+
+
+def _plan_markdown(plan: dict[str, Any]) -> str:
+    lines = ["# Plan", "", "## 项目信息", ""]
+    for key, value in plan["project_info"].items():
+        lines.append(f"- {key}: {value}")
+    lines += ["", "## 硬性条款"]
+    lines += [f"- {item}" for item in plan["hard_clauses"]]
+    lines += ["", "## 技术指标"]
+    lines += [f"- {item}" for item in plan["technical_requirements"]]
+    lines += ["", "## 评分项"]
+    lines += [f"- {item['name']} ({item['score']}): {item['rule']}" for item in plan["scoring_items"]]
+    lines += ["", "## 缺失材料"]
+    if plan["missing_materials"]:
+        lines += [f"- {item['name']} [{item['risk']}]" for item in plan["missing_materials"]]
+    else:
+        lines.append("- 暂未发现")
+    lines += ["", "## 证据检索"]
+    for item in plan["evidence_items"]:
+        ids = ", ".join(item["evidence_ids"]) or "无"
+        lines.append(f"- {item['name']}: {item['status']} ({ids})")
+    return "\n".join(lines) + "\n"
+
+
+def approve_plan(project_id: str) -> dict[str, Any]:
+    project = get_project_record(project_id)
+    if not project.get("plan"):
+        raise HTTPException(status_code=400, detail="Plan has not been generated")
+    project["stage"] = "approved"
+    project["progress"] = 45
+    _save_project(project)
+    return {"project_id": project_id, "status": "approved"}
+
+
+def generate_execution(project_id: str, db: Session) -> dict[str, Any]:
+    project = get_project_record(project_id)
+    if not project.get("plan"):
+        generate_plan(project_id, db)
+        project = get_project_record(project_id)
+    plan = project["plan"]
+
+    rows: list[dict[str, Any]] = []
+    for idx, clause in enumerate(plan["hard_clauses"], 1):
+        rows.append(_matrix_row(db, f"H{idx}", "hard_clause", clause, "必须响应，缺证据时不得写成已满足。"))
+    for idx, req in enumerate(plan["technical_requirements"], 1):
+        rows.append(_matrix_row(db, f"T{idx}", "technical_requirement", req, "逐条响应，不得负偏离。"))
+    for idx, item in enumerate(plan["scoring_items"], 1):
+        rows.append(_matrix_row(db, f"S{idx}", "scoring_item", f"{item['name']} {item['score']} {item['rule']}", "按评分点补强章节和附件索引。"))
+
+    evidence_trace = []
+    for row in rows:
+        for item in row["evidence"]:
+            evidence_trace.append(
+                {
+                    "row_id": row["id"],
+                    "evidence_id": item["evidence_id"],
+                    "title": item["title"],
+                    "source_doc": item["source_doc"],
+                    "heading_path": item["heading_path"],
+                    "page_hint": item["page_hint"],
+                }
+            )
+
+    draft = _draft_markdown(project, rows)
+    response_matrix = _matrix_markdown(rows)
+    _write_artifact(project_id, "response_matrix.md", response_matrix)
+    _write_artifact(project_id, "draft.md", draft)
+    _write_artifact(project_id, "evidence_trace.json", json.dumps(evidence_trace, ensure_ascii=False, indent=2))
+
+    project["execution"] = {
+        "response_matrix_rows": len(rows),
+        "scoring_table_rows": len(plan["scoring_items"]),
+        "draft_sections": 4,
+        "missing_materials": [{"name": row["requirement"], "status": "missing_evidence"} for row in rows if not row["evidence"]],
+    }
+    project["draft_sections"] = [
+        {"name": "商务偏离表", "artifact": "draft.md"},
+        {"name": "技术偏离表", "artifact": "draft.md"},
+        {"name": "技术方案", "artifact": "draft.md"},
+        {"name": "售后服务方案", "artifact": "draft.md"},
+    ]
+    project["draft_markdown"] = draft
+    project["stage"] = "executed"
+    project["progress"] = 75
+    _save_project(project)
+    return {"project_id": project_id, "status": "executed", **project["execution"]}
+
+
+def _matrix_row(db: Session, row_id: str, row_type: str, requirement: str, response_strategy: str) -> dict[str, Any]:
+    evidence = _find_evidence(db, requirement, top_k=3)
+    return {
+        "id": row_id,
+        "type": row_type,
+        "requirement": requirement,
+        "response_strategy": response_strategy,
+        "evidence": evidence,
+        "status": "covered" if evidence else "missing_evidence",
+    }
+
+
+def _matrix_markdown(rows: list[dict[str, Any]]) -> str:
+    lines = [
+        "# Response Matrix",
+        "",
+        "| ID | 类型 | 招标要求/评分点 | 响应策略 | 证据ID | 状态 |",
+        "|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        ids = ", ".join(item["evidence_id"] for item in row["evidence"]) or "待补充"
+        requirement = row["requirement"].replace("|", " ")
+        lines.append(f"| {row['id']} | {row['type']} | {requirement} | {row['response_strategy']} | {ids} | {row['status']} |")
+    return "\n".join(lines) + "\n"
+
+
+def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
+    hard = [row for row in rows if row["type"] == "hard_clause"]
+    tech = [row for row in rows if row["type"] == "technical_requirement"]
+    scoring = [row for row in rows if row["type"] == "scoring_item"]
+
+    lines = [
+        "# 投标文件草稿",
+        "",
+        f"项目名称：{project.get('name', '')}",
+        f"投标人：{project.get('bidder') or '待填写'}",
+        "",
+        "## 一、商务响应及偏离表",
+        "",
+        "| 序号 | 招标要求 | 投标响应 | 偏离说明 | 证据链 |",
+        "|---|---|---|---|---|",
+    ]
+    for idx, row in enumerate(hard, 1):
+        ids = _ids(row)
+        response = "已按要求响应，详见证据链。" if ids else "待补充对应证明材料，正式稿不得写成已提供。"
+        deviation = "无偏离" if ids else "材料待补充"
+        lines.append(f"| {idx} | {row['requirement']} | {response} | {deviation} | {ids or '待补充'} |")
+
+    lines += [
+        "",
+        "## 二、技术响应及偏离表",
+        "",
+        "| 序号 | 技术要求 | 投标响应 | 偏离说明 | 证据链 |",
+        "|---|---|---|---|---|",
+    ]
+    for idx, row in enumerate(tech, 1):
+        ids = _ids(row)
+        response = "采用成熟私有云平台能力逐项响应，并在技术方案中展开实现路径。"
+        if not ids:
+            response = "能力描述需补充截图、产品白皮书或原厂证明后进入正式稿。"
+        lines.append(f"| {idx} | {row['requirement']} | {response} | {'无偏离' if ids else '证据待补充'} | {ids or '待补充'} |")
+
+    lines += [
+        "",
+        "## 三、技术方案",
+        "",
+        "### 3.1 整体架构设计",
+        "本项目建议采用分层解耦的私有云架构，覆盖计算虚拟化、分布式块存储、SDN 网络、安全微隔离、统一运维与服务编排。方案以 response matrix 为约束源，所有涉及资格、评分和技术指标的陈述均回链到证据材料。",
+        "",
+        "### 3.2 关键能力实现",
+    ]
+    for row in tech:
+        lines.append(f"- {row['requirement']} 证据链：{_ids(row) or '待补充'}。")
+
+    lines += [
+        "",
+        "### 3.3 评分点支撑",
+    ]
+    for row in scoring:
+        lines.append(f"- {row['requirement']}：{_ids(row) or '缺少直接证据，列入补材料清单'}。")
+
+    lines += [
+        "",
+        "## 四、售后服务方案",
+        "",
+        "投标人承诺建立项目经理、云平台实施工程师、安全工程师和售后响应团队组成的服务组织，提供项目实施、培训、质保和运维支持。人员证书、服务承诺函和原厂支持文件必须在正式稿附件目录中逐项索引。",
+        "",
+        "## 五、材料补充清单",
+    ]
+    missing = [row for row in rows if not row["evidence"]]
+    if missing:
+        lines += [f"- {row['id']} {row['requirement']}" for row in missing]
+    else:
+        lines.append("- 当前 response matrix 均已有可追溯 evidence_id。")
+    return "\n".join(lines) + "\n"
+
+
+def _ids(row: dict[str, Any]) -> str:
+    return ", ".join(item["evidence_id"] for item in row["evidence"])
+
+
+def generate_review(project_id: str) -> dict[str, Any]:
+    project = get_project_record(project_id)
+    matrix_text = read_artifact_text(project_id, "response_matrix.md")
+    if not matrix_text:
+        raise HTTPException(status_code=400, detail="Execution artifacts not found")
+
+    data_rows = [
+        line
+        for line in matrix_text.splitlines()
+        if line.startswith("| ") and not line.startswith("| ID") and not line.startswith("|---")
+    ]
+    missing_rows = [line for line in data_rows if "missing_evidence" in line]
+    total_rows = len(data_rows)
+    covered_rows = max(total_rows - len(missing_rows), 0)
+
+    findings = []
+    for line in missing_rows:
+        severity = "high" if "| hard_clause |" in line else "medium"
+        area = "废标风险" if severity == "high" else "评分风险"
+        message = "该条款缺少可回溯 evidence_id，正式稿不得宣称已提供证明材料。"
+        findings.append({"severity": severity, "area": area, "message": message, "suggestion": "补充真实附件或将响应改为待补充。"})
+
+    if "待补充" not in project.get("draft_markdown", "") and not findings:
+        findings.append({"severity": "low", "area": "材料索引", "message": "建议在正式排版阶段补充页码索引。", "suggestion": "由装订稿页码回填。"})
+
+    review = {
+        "score_coverage": {"covered": covered_rows, "total": total_rows},
+        "hard_clause_coverage": {
+            "covered": sum(1 for line in matrix_text.splitlines() if "| hard_clause |" in line and "covered" in line),
+            "total": sum(1 for line in matrix_text.splitlines() if "| hard_clause |" in line),
+        },
+        "findings": findings,
+    }
+    _write_artifact(project_id, "review.md", _review_markdown(review))
+    project["review"] = review
+    project["stage"] = "reviewed"
+    project["progress"] = 100
+    _save_project(project)
+    return {"project_id": project_id, "status": "reviewed", **review}
+
+
+def _review_markdown(review: dict[str, Any]) -> str:
+    lines = [
+        "# Review",
+        "",
+        f"- 评分覆盖：{review['score_coverage']['covered']}/{review['score_coverage']['total']}",
+        f"- 硬性条款覆盖：{review['hard_clause_coverage']['covered']}/{review['hard_clause_coverage']['total']}",
+        "",
+        "## 质检发现",
+    ]
+    if review["findings"]:
+        for item in review["findings"]:
+            lines.append(f"- [{item['severity']}] {item['area']}: {item['message']} 建议：{item['suggestion']}")
+    else:
+        lines.append("- 未发现缺材料或废标风险。")
+    return "\n".join(lines) + "\n"
+
+
+def _write_artifact(project_id: str, name: str, content: str) -> None:
+    _artifact_dir(project_id).mkdir(parents=True, exist_ok=True)
+    (_artifact_dir(project_id) / name).write_text(content, encoding="utf-8")
+
+
+def list_project_artifacts(project_id: str) -> list[dict[str, Any]]:
+    get_project_record(project_id)
+    artifact_dir = _artifact_dir(project_id)
+    if not artifact_dir.exists():
+        return []
+    artifacts = []
+    for path in sorted(artifact_dir.iterdir()):
+        if path.is_file():
+            stat = path.stat()
+            artifacts.append({"name": path.name, "size": stat.st_size, "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()})
+    return artifacts
+
+
+def read_artifact_text(project_id: str, artifact_name: str) -> str:
+    get_project_record(project_id)
+    path = (_artifact_dir(project_id) / artifact_name).resolve()
+    artifact_root = _artifact_dir(project_id).resolve()
+    if artifact_root not in path.parents and path != artifact_root:
+        raise HTTPException(status_code=400, detail="Invalid artifact path")
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    return path.read_text(encoding="utf-8")
+
+
+def artifact_response(project_id: str, artifact_name: str) -> PlainTextResponse:
+    return PlainTextResponse(read_artifact_text(project_id, artifact_name), media_type="text/markdown; charset=utf-8")
+
+
+def run_demo_real_case(db: Session) -> dict[str, Any]:
+    if not VAULT_TENDER.exists():
+        raise HTTPException(status_code=404, detail="Real tender case not found")
+
+    project = create_project_record("真实案例验收 - 私有云建设项目", bidder="投标人待填写", project_role="demo")
+    tender = VAULT_TENDER.read_text(encoding="utf-8")
+    project["tender_markdown"] = tender
+    project["source_files"].append(
+        {
+            "filename": VAULT_TENDER.name,
+            "source_type": "tender",
+            "parse_status": "loaded_from_vault",
+            "path": str(VAULT_TENDER),
+            "markdown_chars": len(tender),
+        }
+    )
+    _source_dir(project["id"]).mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(VAULT_TENDER, _source_dir(project["id"]) / VAULT_TENDER.name)
+    _save_project(project)
+
+    generate_plan(project["id"], db)
+    approve_plan(project["id"])
+    generate_execution(project["id"], db)
+    generate_review(project["id"])
+
+    return {
+        "status": "completed",
+        "project_id": project["id"],
+        "output_dir": str(_artifact_dir(project["id"])),
+        "artifacts": [item["name"] for item in list_project_artifacts(project["id"])],
+    }

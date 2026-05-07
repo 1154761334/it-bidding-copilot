@@ -1,97 +1,69 @@
-# bid-stack
+# IT Bidding Copilot V1
 
-统一的本地开发与运行入口目录。
+IT Bidding Copilot is an intelligent bidding drafting workbench designed to look like a modern Chat interface but act as a rigorous, workflow-driven bidding engine.
 
-这里把三类东西放在一起管理：
-- `Bidding-agent/`：投标域产品层
-- `obsidian_vault_pipeline/`：OVP fork，本地知识层上游
-- `workspaces/`：实际项目工作区
+## 🌟 Architecture Overview
 
-## 目录结构
+The current commercial-trial track keeps the architecture deliberately narrow:
+
+- **Frontend (`frontend/`)**: a customized LobeChat/LaboChat workspace. The `/bid` route is the bidding workbench and displays real projects, evidence search results, response matrices, drafts, reviews, and Markdown artifacts.
+- **Backend (`backend/`)**: a FastAPI service for tender parsing, Plan, Execute, Review, Evidence retrieval, and Markdown artifact generation.
+  - **Workflow Engine**: the existing LangGraph path remains available for LLM-driven runs.
+  - **Workbench API**: stable `/bid` endpoints expose project state, evidence traceability, real-case demo artifacts, and generated Markdown files.
+  - **Evidence Store**: uses the existing Vault/Obsidian-derived material source and database records. Embeddings are optional; keyword retrieval remains available without external model quota.
+- **Optional local services**: Docker services can help local development, but MinIO, Hermes, OVP, and new vector/object-store stacks are not required strong dependencies for the current phase.
+
+## 📂 Directory Structure
 
 ```text
 /root/it-bidding-copilot/
-├── Bidding-agent/
-├── obsidian_vault_pipeline/
-├── workspaces/
-└── bin/
+├── frontend/             # LobeChat fork (Next.js)
+├── backend/              # FastAPI + LangGraph Orchestrator
+│   └── src/
+│       ├── main.py       # API Entrypoint
+│       ├── workflow.py   # LangGraph BidState and Nodes
+│       ├── parser.py     # MarkItDown & PyMuPDF4LLM wrappers
+│       ├── models.py     # SQLAlchemy DB Models
+│       └── storage.py    # MinIO Client
+├── docker-compose.yml    # Optional local services
+└── README.md             # This file
 ```
 
-## 快速开始
+## 🚀 Quick Start
 
-### 1. 检查环境
+### 1. Start Optional Local Services
+Start local services if you need the existing database-backed Evidence Store:
 ```bash
-bash /root/it-bidding-copilot/bin/check-stack.sh
+cd /root/it-bidding-copilot
+docker-compose up -d
 ```
 
-### 2. 创建一个新工作区
+### 2. Start Backend
+Install dependencies and run the FastAPI server:
 ```bash
-bash /root/it-bidding-copilot/bin/new-workspace.sh my-bid-project project-001
+cd /root/it-bidding-copilot/backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-这会自动：
-- 初始化 OVP 原生 workspace
-- 创建当前项目输入文件夹
-- 在 workspace 根目录复制 `.env` 模板
-
-### 3. 编辑 OVP vault `.env`
-默认位置：
-```text
-/root/it-bidding-copilot/workspaces/my-bid-project/bid-vault/.env
-/root/it-bidding-copilot/workspaces/my-bid-project/.env
-```
-
-### 4. 检查 OVP 配置
+### 3. Start Frontend
+Install dependencies and start LobeChat development server:
 ```bash
-bash /root/it-bidding-copilot/bin/check-vault.sh my-bid-project
+cd /root/it-bidding-copilot/frontend
+npm install
+npm run dev
 ```
 
-### 5. 启动投标经理
-```bash
-bash /root/it-bidding-copilot/bin/start-bid-manager.sh my-bid-project
-```
+## 🔄 Core Workflow
 
-## 材料放置约定
+1. **Plan Mode**: The user uploads a Tender Document. The Agent parses it (via the `/parse/` endpoint), extracts key requirements, missing materials, and proposes a drafting plan.
+2. **Human Confirmation**: The workflow pauses. The user reviews the artifacts in the LobeChat `/bid` workbench and approves the plan.
+3. **Execute Mode**: The agent builds a response matrix, evidence trace, and draft Markdown artifacts.
+4. **Review Mode**: QA checks against hard clauses, scoring items, missing materials, and evidence boundaries.
 
-当前项目输入：
-- 招标文件、补遗、清单、项目附件
-  放到：
-  `workspaces/<workspace>/50-Inbox/01-Raw/current-tender/<project-id>/tender/`
-- 当前项目专属我方补充材料
-  放到：
-  `workspaces/<workspace>/50-Inbox/01-Raw/current-tender/<project-id>/company-inputs/`
-- 当前项目专属厂商材料
-  放到：
-  `workspaces/<workspace>/50-Inbox/01-Raw/current-tender/<project-id>/vendor-inputs/`
+## 🛠 Parsing Supported Formats
 
-长期可复用知识：
-- 历史标书
-  放到：
-  `workspaces/<workspace>/50-Inbox/01-Raw/historical-bid/`
-- 公司资质
-  放到：
-  `workspaces/<workspace>/50-Inbox/01-Raw/company-credentials/`
-- 厂商长期材料
-  放到：
-  `workspaces/<workspace>/50-Inbox/01-Raw/vendor-solutions/`
-
-## 顶层约定
-
-- `/root/it-bidding-copilot/` 根目录尽量只放：
-  - 两个代码仓库
-  - `workspaces/`
-  - `bin/`
-- 不建议把真实项目文档长期直接堆在根目录。
-- 若需要临时整理 `.docx`，优先使用：
-  `bash /root/it-bidding-copilot/Bidding-agent/scripts/convert-docx.sh ...`
-
-## 常用路径
-
-- 产品仓库：
-  `/root/it-bidding-copilot/Bidding-agent`
-- OVP fork：
-  `/root/it-bidding-copilot/obsidian_vault_pipeline`
-- 默认测试工作区：
-  `/root/it-bidding-copilot/workspaces/my-bid-project`
-- 顶层脚本：
-  `/root/it-bidding-copilot/bin`
+- `.docx`, `.xlsx`, `.pptx` -> Markdown via `MarkItDown`
+- `.pdf` -> Markdown via `PyMuPDF4LLM` (Optimized for tables)
