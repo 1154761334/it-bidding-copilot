@@ -509,7 +509,15 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
         "### 3.2 关键能力实现",
     ]
     for row in tech:
-        lines.append(f"- {_plain_requirement(row['requirement'])} 证据链：{_ids(row) or '待补充'}。")
+        evidence_refs = _evidence_refs(row)
+        lines += [
+            "",
+            f"#### {row['id']} {_plain_requirement(row['requirement'])}",
+            "",
+            f"- 响应口径：本项按招标指标逐条正向响应，正式稿应保持与偏离表、截图证明和附件索引一致，不写无证据的扩展能力。",
+            f"- 实现要点：{_implementation_note(row['requirement'])}",
+            f"- 证据定位：{evidence_refs or '缺少直接证据，需补充截图、产品白皮书或原厂证明后进入正式稿'}。",
+        ]
 
     lines += [
         "",
@@ -554,6 +562,63 @@ def _draft_markdown(project: dict[str, Any], rows: list[dict[str, Any]]) -> str:
 
 def _ids(row: dict[str, Any]) -> str:
     return ", ".join(item["evidence_id"] for item in row["evidence"])
+
+
+def _evidence_refs(row: dict[str, Any]) -> str:
+    refs = []
+    for item in row["evidence"][:3]:
+        refs.append(f"{item['evidence_id']}（{_clean_line(item['title'])}）")
+    return "；".join(refs)
+
+
+def _implementation_note(requirement: str) -> str:
+    text = _plain_requirement(requirement)
+    rules = [
+        (
+            ["镜像", "OVA"],
+            "围绕镜像生命周期写明格式导入、模板管理、虚拟机导出和截图证明口径，重点证明 ISO、raw、qcow2、vmdk、ovf 与 OVA 导出的可操作路径。",
+        ),
+        (
+            ["ARM", "X86", "MIPS", "一云多芯"],
+            "围绕一云多芯兼容性写明异构 CPU 纳管边界、兼容性证书和适配清单，避免只写平台支持而缺少芯片厂商互认证材料。",
+        ),
+        (
+            ["EC算法", "纠删", "2+1", "4+2", "8+2"],
+            "围绕纠删码保护机制写明数据可靠性、容量利用率和 2+1、4+2、8+2 等保护级别，证据应指向产品功能说明或界面截图。",
+        ),
+        (
+            ["副本", "拓扑", "权重"],
+            "围绕分布式存储策略写明副本数调整、在线变更和拓扑权重配置，并把管理界面截图与存储策略说明放入同一附件组。",
+        ),
+        (
+            ["缓存池", "数据池"],
+            "围绕缓存池与数据池解耦写明独立部署、独立扩容和业务影响边界，证据应能对应到存储池配置或架构说明。",
+        ),
+        (
+            ["CDP", "文件找回"],
+            "围绕 CDP 备份恢复写明连续数据保护、文件级找回流程和支持的文件系统范围，截图或操作说明需能支撑 XFS、Ext、exFAT、NTFS、FAT32 等指标。",
+        ),
+        (
+            ["资源中心", "配额"],
+            "围绕资源中心展示写明组织视图、云主机、云硬盘、网络、安全组及 vCPU、内存、主存储配额统计，并以界面截图证明可视化能力。",
+        ),
+        (
+            ["数据中心管理", "快速创建"],
+            "围绕数据中心管理写明按云平台类型汇总资源、快速创建入口和管理员角色操作边界，证据应指向数据中心或多云管理界面截图。",
+        ),
+        (
+            ["服务编排", "服务目录"],
+            "围绕服务目录编排写明一次性申请跨云资源、审批或交付流程和资源组合能力，证据应能对应服务目录或编排界面。",
+        ),
+        (
+            ["高负载", "低负载", "空闲云主机", "列表导出"],
+            "围绕优化建议写明内置规则识别高负载、低负载、空闲云主机，并说明列表导出作为运维闭环材料。",
+        ),
+    ]
+    for keywords, note in rules:
+        if any(keyword in text for keyword in keywords):
+            return note
+    return "围绕该技术指标拆分管理界面、配置流程、截图证明和附件位置，确保每项能力均能回链到响应矩阵中的 evidence_id。"
 
 
 def _page_or_asset_hint(item: dict[str, Any]) -> str:

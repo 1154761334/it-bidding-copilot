@@ -189,3 +189,29 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: make the generated technical方案正文 less generic by expanding high-value technical requirements into evidence-backed implementation paragraphs instead of one-line bullets.
+
+## 2026-05-08 Round 8
+
+### Baseline
+- Current evaluator baseline passed at `100.0`, checks `40/40`, project `22`, evidence trace length `70`.
+- Lowest item: `draft.md` technical solution section had complete evidence ids, but section 3.2 still read like one-line response bullets instead of implementation paragraphs that reviewers can reuse in a real technical proposal.
+
+### Changes
+- Expanded `draft.md` section 3.2 into one subsection per technical requirement (`T1` through `T10`).
+- Added deterministic implementation notes for common private-cloud clause types: image lifecycle, heterogeneous CPU compatibility, EC erasure coding, replica/topology policies, cache/data pool separation, CDP recovery, resource center, data center management, service orchestration, and optimization recommendations.
+- Added evidence定位 text that pairs each technical requirement with concrete `EVID-*` ids and cleaned evidence titles.
+- Fixed an ordering issue where EC erasure-coding clauses could accidentally match the generic replica-policy note because the requirement also mentioned multiple copies.
+- Tightened `eval_bid_assistant.py` from 40 to 42 checks, including clause-specific technical note coverage for 一云多芯, 纠删码, and 服务目录编排.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `42/42`, project `25`, evidence trace length `70`.
+- Artifact spot check: `draft.md` now renders `T1`-`T10` as subsections with 响应口径、实现要点、证据定位; `T4` correctly uses 纠删码保护机制 wording.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: improve scoring-point support in `draft.md` by turning score rows into a score-by-score response checklist with evidence readiness and missing manual signoff.

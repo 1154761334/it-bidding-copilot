@@ -160,6 +160,8 @@ def main() -> int:
     checks.append(check("trace records include asset paths", all("asset_paths" in item for item in trace)))
 
     checks.append(check("draft has realistic structure", all(token in draft for token in ["商务响应", "技术方案", "售后服务方案"])))
+    checks.append(check("draft expands technical implementation", all(token in draft for token in ["#### T1", "响应口径", "实现要点", "证据定位", "不写无证据的扩展能力"])))
+    checks.append(check("draft maps technical notes to clause types", all(token in draft for token in ["一云多芯兼容性", "纠删码保护机制", "服务目录编排"])))
     checks.append(check("draft has evidence index", "## 六、证据索引" in draft and "| 证据ID | 标题 | 来源文件 | 来源位置 | 页码/资产提示 | 装订状态 |" in draft))
     checks.append(check("draft evidence index tracks attachment readiness", all(token in draft for token in ["页码/资产提示", "装订状态", "需回填页码"])))
     checks.append(check("draft avoids page placeholders", "第 **X** 页" not in draft and "第X页" not in draft))
