@@ -164,11 +164,18 @@ def main() -> int:
     checks.append(check("draft avoids unsupported provided claims", "待补充对应证明材料，正式稿不得写成已提供" not in draft))
     checks.append(check("review flags coverage", "评分覆盖" in review and "硬性条款覆盖" in review))
     checks.append(check("review flags missing form risks", "签章与主体信息" in review and "材料索引" in review))
+    checks.append(
+        check(
+            "review has actionable risk buckets",
+            all(token in review for token in ["## 风险分桶", "废标风险", "商务条款风险", "评分点风险", "签章与材料风险"]),
+        )
+    )
 
     frontend_route = read_repo_text("frontend/src/business/client/BusinessDesktopRoutes.tsx")
     frontend_store = read_repo_text("frontend/src/store/bidding/index.ts")
     frontend_workbench = read_repo_text("frontend/src/features/Bidding/BiddingWorkbench.tsx")
     frontend_draft_tab = read_repo_text("frontend/src/features/Bidding/BiddingDraftTab.tsx")
+    frontend_review_tab = read_repo_text("frontend/src/features/Bidding/BiddingReviewTab.tsx")
     checks.append(check("frontend /bid route wired", "path: 'bid'" in frontend_route and "BiddingWorkbench" in frontend_route))
     checks.append(
         check(
@@ -208,6 +215,7 @@ def main() -> int:
             all(token in frontend_draft_tab for token in ["EvidenceTracePanel", "groupEvidenceTrace", "onSelectEvidence", "Page / Asset hint"]),
         )
     )
+    checks.append(check("frontend review tab shows risk buckets", all(token in frontend_review_tab for token in ["risk_buckets", "Risk Buckets", "bucket.status"])))
 
     passed = sum(1 for item in checks if item["ok"])
     total = len(checks)

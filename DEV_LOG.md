@@ -131,3 +131,31 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: improve generated `review.md` severity model so high-risk commercial terms, missing主体信息, and scoring-risk evidence are separated into explicit actionable buckets.
+
+## 2026-05-08 Round 6
+
+### Baseline
+- Lowest item: generated `review.md` severity model. Round 5 made evidence trace usable, but review findings still mixed disqualification risk, commercial-term signoff, scoring evidence, and signature/material completion into a flat list.
+- The evaluator did not verify that the generated review artifact or `/bid` Review tab exposed actionable risk buckets.
+
+### Changes
+- Parsed response matrix Markdown into structured rows before review generation, including escaped table separators.
+- Split review output into explicit risk buckets: 废标风险, 商务条款风险, 评分点风险, and 签章与材料风险.
+- Added commercial-term signoff checks for quotation, payment, guarantee, invoice, and bid-validity clauses while preserving evidence IDs.
+- Kept hard-clause and scoring coverage based on parsed matrix rows instead of string heuristics.
+- Rendered review risk buckets in the `/bid` Review tab with bucket status and item details.
+- Tightened `eval_bid_assistant.py` with checks for bucketed review Markdown and frontend risk bucket rendering.
+
+### Verification
+- `backend/venv/bin/python -m py_compile backend/src/api_workbench.py eval_bid_assistant.py`: PASS.
+- `cd frontend && pnpm exec eslint src/features/Bidding/BiddingReviewTab.tsx`: PASS.
+- `cd frontend && pnpm run type-check`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `36/36`, project `18`, evidence trace length `70`.
+- `docker compose ps`: db, redis, and optional minio containers up.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS, 253 chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS.
+- `cd frontend && pnpm run build`: PASS. Build still prints upstream QStash missing-token and Node runtime warnings, but exits 0.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Next useful iteration: add page/attachment readiness scoring so review buckets can distinguish evidence exists from final bindery-ready evidence.

@@ -554,40 +554,163 @@ def _ids(row: dict[str, Any]) -> str:
     return ", ".join(item["evidence_id"] for item in row["evidence"])
 
 
+def _split_md_row(line: str) -> list[str]:
+    text = line.strip()
+    if text.startswith("|"):
+        text = text[1:]
+    if text.endswith("|"):
+        text = text[:-1]
+
+    cells: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for char in text:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "|":
+            cells.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+    cells.append("".join(current).strip())
+    return cells
+
+
+def _matrix_rows_from_markdown(matrix_text: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for line in matrix_text.splitlines():
+        if not line.startswith("| ") or line.startswith("| ID") or line.startswith("|---"):
+            continue
+        cells = _split_md_row(line)
+        if len(cells) != 6:
+            continue
+        rows.append(
+            {
+                "id": cells[0],
+                "type": cells[1],
+                "requirement": cells[2],
+                "strategy": cells[3],
+                "evidence_ids": cells[4],
+                "status": cells[5],
+            }
+        )
+    return rows
+
+
+def _review_finding(severity: str, area: str, message: str, suggestion: str, bucket: str) -> dict[str, str]:
+    return {"severity": severity, "area": area, "message": message, "suggestion": suggestion, "bucket": bucket}
+
+
 def generate_review(project_id: str) -> dict[str, Any]:
     project = get_project_record(project_id)
     matrix_text = read_artifact_text(project_id, "response_matrix.md")
     if not matrix_text:
         raise HTTPException(status_code=400, detail="Execution artifacts not found")
 
-    data_rows = [
-        line
-        for line in matrix_text.splitlines()
-        if line.startswith("| ") and not line.startswith("| ID") and not line.startswith("|---")
+    data_rows = _matrix_rows_from_markdown(matrix_text)
+    missing_rows = [row for row in data_rows if row["status"] == "missing_evidence"]
+    hard_rows = [row for row in data_rows if row["type"] == "hard_clause"]
+    scoring_rows = [row for row in data_rows if row["type"] == "scoring_item"]
+    missing_hard = [row for row in missing_rows if row["type"] == "hard_clause"]
+    missing_scoring = [row for row in missing_rows if row["type"] == "scoring_item"]
+    commercial_rows = [
+        row
+        for row in hard_rows
+        if any(keyword in row["requirement"] for keyword in ["报价", "付款", "履约保证金", "发票", "投标有效期"])
     ]
-    missing_rows = [line for line in data_rows if "missing_evidence" in line]
     total_rows = len(data_rows)
     covered_rows = max(total_rows - len(missing_rows), 0)
 
-    findings = []
-    for line in missing_rows:
-        severity = "high" if "| hard_clause |" in line else "medium"
-        area = "废标风险" if severity == "high" else "评分风险"
-        requirement = line.split("|")[3].strip() if len(line.split("|")) > 3 else "未知条款"
-        message = f"该条款缺少可回溯 evidence_id：{requirement}。正式稿不得宣称已提供证明材料。"
-        findings.append({"severity": severity, "area": area, "message": message, "suggestion": "补充真实附件或将响应改为待补充。"})
+    findings: list[dict[str, str]] = []
+    for row in missing_rows:
+        severity = "high" if row["type"] == "hard_clause" else "medium"
+        area = "废标风险" if severity == "high" else "评分点风险"
+        message = f"该条款缺少可回溯 evidence_id：{row['requirement']}。正式稿不得宣称已提供证明材料。"
+        findings.append(_review_finding(severity, area, message, "补充真实附件或将响应改为待补充。", area))
+
+    if commercial_rows:
+        findings.append(
+            _review_finding(
+                "medium",
+                "商务条款风险",
+                f"报价、付款、履约保证金等 {len(commercial_rows)} 条高风险商务条款已覆盖证据，但正式稿仍需复核金额、税率、发票类型和保证金口径。",
+                "由商务负责人对开标一览表、报价明细、合同付款条款和保证金承诺逐项签核。",
+                "商务条款风险",
+            )
+        )
+
+    if scoring_rows and not missing_scoring:
+        findings.append(
+            _review_finding(
+                "low",
+                "评分点风险",
+                "评分点均有 evidence_id，但正式附件目录仍需按评分细则逐项映射，避免评委无法快速定位得分材料。",
+                "在装订稿中按评分项回填附件页码，并与证据索引交叉校验。",
+                "评分点风险",
+            )
+        )
 
     if "投标人待填写" in project.get("draft_markdown", ""):
-        findings.append({"severity": "medium", "area": "签章与主体信息", "message": "投标人名称仍为待填写，正式投标文件存在主体信息不完整风险。", "suggestion": "回填投标人全称并同步封面、授权书、偏离表。"})
+        findings.append(
+            _review_finding(
+                "medium",
+                "签章与主体信息",
+                "投标人名称仍为待填写，正式投标文件存在主体信息不完整风险。",
+                "回填投标人全称并同步封面、授权书、偏离表。",
+                "签章与材料风险",
+            )
+        )
 
-    findings.append({"severity": "low", "area": "材料索引", "message": "正式装订前需回填附件页码、签章状态和原件/复印件一致性。", "suggestion": "由装订稿页码回填证据索引。"})
+    findings.append(
+        _review_finding(
+            "low",
+            "材料索引",
+            "正式装订前需回填附件页码、签章状态和原件/复印件一致性。",
+            "由装订稿页码回填证据索引。",
+            "签章与材料风险",
+        )
+    )
+
+    risk_buckets = [
+        {
+            "name": "废标风险",
+            "severity": "high",
+            "status": "blocked" if missing_hard else "clear",
+            "items": [f"{row['id']} {row['requirement']}" for row in missing_hard] or ["未发现未覆盖的硬性条款。"],
+        },
+        {
+            "name": "商务条款风险",
+            "severity": "medium",
+            "status": "needs_review" if commercial_rows else "clear",
+            "items": [f"{row['id']} {row['requirement']}：{row['evidence_ids']}" for row in commercial_rows]
+            or ["未提取到报价、付款、履约保证金等高风险商务条款。"],
+        },
+        {
+            "name": "评分点风险",
+            "severity": "medium",
+            "status": "blocked" if missing_scoring else "needs_index",
+            "items": [f"{row['id']} {row['requirement']}" for row in missing_scoring] or ["评分点均已覆盖，需在正式附件目录中回填页码。"],
+        },
+        {
+            "name": "签章与材料风险",
+            "severity": "medium",
+            "status": "needs_completion",
+            "items": [item["message"] for item in findings if item["bucket"] == "签章与材料风险"],
+        },
+    ]
 
     review = {
         "score_coverage": {"covered": covered_rows, "total": total_rows},
         "hard_clause_coverage": {
-            "covered": sum(1 for line in matrix_text.splitlines() if "| hard_clause |" in line and "covered" in line),
-            "total": sum(1 for line in matrix_text.splitlines() if "| hard_clause |" in line),
+            "covered": sum(1 for row in hard_rows if row["status"] == "covered"),
+            "total": len(hard_rows),
         },
+        "risk_buckets": risk_buckets,
         "findings": findings,
     }
     _write_artifact(project_id, "review.md", _review_markdown(review))
@@ -605,6 +728,22 @@ def _review_markdown(review: dict[str, Any]) -> str:
         f"- 评分覆盖：{review['score_coverage']['covered']}/{review['score_coverage']['total']}",
         f"- 硬性条款覆盖：{review['hard_clause_coverage']['covered']}/{review['hard_clause_coverage']['total']}",
         "",
+        "## 风险分桶",
+        "",
+    ]
+    for bucket in review.get("risk_buckets", []):
+        lines.extend(
+            [
+                f"### {bucket['name']}",
+                f"- 严重级别：{bucket['severity']}",
+                f"- 状态：{bucket['status']}",
+            ]
+        )
+        for item in bucket.get("items", []):
+            lines.append(f"- {item}")
+        lines.append("")
+
+    lines += [
         "## 质检发现",
     ]
     if review["findings"]:
