@@ -1641,3 +1641,21 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Frontend source publication still needs a separate Git workflow because the customized LobeChat workspace is a nested repository, not part of the top-level `main` tree.
+
+## 2026-05-08 Round 52
+
+### Baseline
+- User correctly identified that the GitHub top-level repository did not include `frontend/` after Round 51.
+- Root cause: `frontend/` was a nested Git checkout and had been treated as a source-control boundary instead of vendored source, so top-level `main` could not reconstruct the full customized project.
+
+### Changes
+- Switched the top-level source-control policy to vendor the current frontend tracked source files into `frontend/` as ordinary repository contents.
+- Kept local frontend metadata and generated state out of the top-level repo: `frontend/.git/`, `frontend/node_modules/`, `frontend/.next/`, SPA build output, auth storage state, TypeScript build info, and `frontend/.env.desktop`.
+- Updated `README.md` to state that frontend source is now tracked in this repository from frontend commit `ad8e4bb968`.
+
+### Verification
+- Staged `10575` frontend source files from the nested checkout, excluding `frontend/.env.desktop`, `frontend/.git/`, dependency directories, build output, auth state, and TypeScript build info.
+- `git diff --cached --check -- . ':(exclude)frontend'`: PASS.
+- Full `git diff --cached --check`: reports pre-existing upstream LobeChat trailing whitespace/snapshot whitespace in vendored frontend files; intentionally not auto-fixed to avoid unrelated upstream formatting churn.
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `git -C frontend status --short --branch`: PASS, local nested checkout metadata restored and still reports `canary...origin/canary [ahead 43, behind 31]`.

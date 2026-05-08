@@ -1,0 +1,87 @@
+{
+  "command": "pnpm run acceptance:bid-smoke:preflight",
+  "expected_terminal_status": "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
+  "gate": "acceptance:bid-smoke:preflight",
+  "mode": "service-free",
+  "schema_version": 1,
+  "sub_artifacts": [
+    {
+      "id": "static_guard",
+      "command": "pnpm run check:bid-smoke-secrets",
+      "status": "BID_ROUTE_SMOKE_SECRET_CHECK_PASS",
+      "source": "scripts/bidding/checkBidRouteSmokeSecrets.mts"
+    },
+    {
+      "id": "runtime_fixture_guard",
+      "command": "pnpm run test:bid-smoke-secrets",
+      "status": "BID_ROUTE_SMOKE_SECRET_TEST_PASS",
+      "source": "scripts/bidding/testBidRouteSmokeSecrets.mts"
+    },
+    {
+      "id": "local_runner_preflight_fixture",
+      "command": "pnpm run test:bid-smoke-acceptance-runner",
+      "status": "BID_SMOKE_ACCEPTANCE_RUNNER_TEST_PASS",
+      "source": "scripts/bidding/testBidSmokeAcceptanceRunner.mts"
+    },
+    {
+      "id": "command_matrix_guard",
+      "command": "pnpm run test:bid-smoke-command-matrix",
+      "status": "BID_SMOKE_COMMAND_MATRIX_TEST_PASS",
+      "source": "scripts/bidding/testBidSmokeCommandMatrix.mts"
+    },
+    {
+      "id": "acceptance_manifest_guard",
+      "command": "pnpm run test:bid-smoke-acceptance-manifest",
+      "status": "BID_SMOKE_ACCEPTANCE_MANIFEST_TEST_PASS",
+      "source": "scripts/bidding/testBidSmokeAcceptanceManifest.mts"
+    },
+    {
+      "id": "acceptance_manifest_drift_fixture",
+      "command": "pnpm run test:bid-smoke-acceptance-manifest-drift",
+      "status": "BID_SMOKE_ACCEPTANCE_MANIFEST_DRIFT_TEST_PASS",
+      "source": "scripts/bidding/testBidSmokeAcceptanceManifestDrift.mts"
+    },
+    {
+      "id": "preflight_ci_summary",
+      "command": "pnpm run test:bid-smoke-preflight-summary",
+      "status": "BID_SMOKE_PREFLIGHT_SUMMARY_TEST_PASS",
+      "source": "scripts/bidding/testBidSmokePreflightSummary.mts"
+    },
+    {
+      "id": "preflight_ci_summary_failure_fixture",
+      "command": "pnpm run test:bid-smoke-preflight-summary-failure",
+      "status": "BID_SMOKE_PREFLIGHT_SUMMARY_FAILURE_TEST_PASS",
+      "source": "scripts/bidding/testBidSmokePreflightSummaryFailure.mts"
+    },
+    {
+      "id": "preflight_command_order_fixture",
+      "command": "pnpm run test:bid-smoke-preflight-order",
+      "status": "BID_SMOKE_PREFLIGHT_ORDER_TEST_PASS",
+      "source": "scripts/bidding/testBidSmokePreflightOrder.mts"
+    },
+    {
+      "id": "production_docs_guard",
+      "command": "pnpm run test:bid-route-production-docs",
+      "status": "BID_ROUTE_PRODUCTION_DOCS_TEST_PASS",
+      "source": "scripts/bidding/testBidRouteProductionDocs.mts"
+    },
+    {
+      "id": "production_docs_failure_fixture",
+      "command": "pnpm run test:bid-route-production-docs-failure",
+      "status": "BID_ROUTE_PRODUCTION_DOCS_FAILURE_TEST_PASS",
+      "source": "scripts/bidding/testBidRouteProductionDocsFailure.mts"
+    },
+    {
+      "id": "production_docs_drift_fixture",
+      "command": "pnpm run test:bid-route-production-docs-drift",
+      "status": "BID_ROUTE_PRODUCTION_DOCS_DRIFT_TEST_PASS",
+      "source": "scripts/bidding/testBidRouteProductionDocsDrift.mts"
+    },
+    {
+      "id": "preflight_port_guard",
+      "command": "BID_ACCEPTANCE_PREFLIGHT_ONLY=1 BID_BACKEND_PORT=18000 BID_FRONTEND_PORT=19876 tsx scripts/bidding/runBidSmokeAcceptance.mts",
+      "status": "BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS",
+      "source": "scripts/bidding/runBidSmokeAcceptance.mts"
+    }
+  ]
+}

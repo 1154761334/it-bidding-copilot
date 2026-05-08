@@ -1,9 +1,6 @@
 # Ignore workspaces and their generated contents
 workspaces/
 
-# Ignore local nested frontend checkout managed by its own Git repository
-frontend/
-
 # Ignore internal company knowledge vault and sensitive data
 vault/
 
@@ -12,6 +9,17 @@ backend/tests/output/
 
 # Ignore large Office source documents kept local or converted into the vault
 *.docx
+
+# Ignore frontend local metadata, dependencies, builds, and auth state
+frontend/.git/
+frontend/.env.desktop
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
+frontend/public/_spa/
+frontend/public/spa/
+frontend/.auth/
+frontend/*.tsbuildinfo
 
 # Ignore Python virtual environments
 .venvs/

@@ -17,7 +17,7 @@ As of 2026-05-08, the commercial-trial track is focused on the `/bid` workbench,
 
 The current commercial-trial architecture stays deliberately narrow:
 
-- **Frontend checkout (`frontend/`)**: a customized LobeChat/LaboChat workspace. It is maintained as a nested Git checkout, not vendored into this top-level repository. The `/bid` route displays real projects, evidence search results, response matrices, drafts, reviews, handoff artifacts, and Markdown evidence traces.
+- **Frontend (`frontend/`)**: a customized LobeChat/LaboChat workspace tracked in this repository as ordinary source files. The local working copy may still keep its own `.git/` metadata for upstream LobeChat history, but that metadata is ignored by the top-level repo. The `/bid` route displays real projects, evidence search results, response matrices, drafts, reviews, handoff artifacts, and Markdown evidence traces.
 - **Backend (`backend/`)**: a FastAPI service for tender parsing, Plan, Execute, Review, evidence retrieval, and Markdown artifact generation.
   - **Workflow engine**: the existing LangGraph path remains available for LLM-driven runs.
   - **Workbench API**: stable `/bid` endpoints expose project state, evidence traceability, real-case demo artifacts, readiness summaries, and generated Markdown files.
@@ -109,6 +109,6 @@ pnpm run acceptance:bid-smoke:local
 
 ## Source Control Notes
 
-- The top-level repository tracks backend code, evaluator code, operator docs, templates, and optional service definitions.
-- `frontend/` is a nested LobeChat checkout currently at frontend commit `ad8e4bb968` on `canary`; push or mirror it through its own Git workflow before relying on a clean top-level clone for frontend source.
+- The top-level repository tracks backend code, frontend source, evaluator code, operator docs, templates, and optional service definitions.
+- `frontend/` source is vendored into this repository from frontend commit `ad8e4bb968` on `canary`; local dependency/build/auth files remain ignored.
 - Generated backend smoke output under `backend/tests/output/` and large Office source documents are local artifacts and are intentionally not tracked by the top-level repo.
