@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: bidding-postgres
+    environment:
+      POSTGRES_USER: bidding_user
+      POSTGRES_PASSWORD: bidding_password
+      POSTGRES_DB: bidding_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: bidding-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    container_name: bidding-minio
+    environment:
+      MINIO_ROOT_USER: bidding_minio_user
+      MINIO_ROOT_PASSWORD: bidding_minio_password
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

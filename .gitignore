@@ -1,8 +1,17 @@
 # Ignore workspaces and their generated contents
 workspaces/
 
+# Ignore local nested frontend checkout managed by its own Git repository
+frontend/
+
 # Ignore internal company knowledge vault and sensitive data
 vault/
+
+# Ignore generated backend smoke/evaluation artifacts
+backend/tests/output/
+
+# Ignore large Office source documents kept local or converted into the vault
+*.docx
 
 # Ignore Python virtual environments
 .venvs/

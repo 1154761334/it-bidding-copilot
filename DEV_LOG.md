@@ -1619,3 +1619,25 @@
 ### Blockers / Next
 - Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
 - Next useful iteration: add a compact machine-readable schema/version assertion for the preflight summary output itself, or add summary failure fixtures for missing/duplicated terminal artifacts before relying on the order guard.
+
+## 2026-05-08 Round 51
+
+### Baseline
+- Current evaluator baseline from Round 50 was green at `100.0`, checks `115/115`, project `210`, evidence trace length `94`.
+- Lowest item: the top-level README still described the earlier basic V1 architecture and did not summarize the latest commercial-trial readiness model, `/bid` acceptance commands, production-route smoke guardrails, or the source-control boundary for the nested frontend checkout.
+
+### Changes
+- Updated `README.md` with the current commercial-trial status, generated artifact set, readiness/review scope, frontend workbench behavior, acceptance commands, production-route smoke pointer, and known LLM blocker.
+- Documented that `frontend/` is a nested LobeChat checkout currently at commit `ad8e4bb968` on `canary`, not vendored into the top-level repository.
+- Added top-level ignore rules for the nested frontend checkout, generated backend smoke output, and large Office source documents so the main repository stays focused on backend/evaluator/operator docs.
+- Prepared `docker-compose.yml` for top-level tracking because the README uses it as the optional local service entrypoint.
+
+### Verification
+- `git diff --check`: PASS.
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS after running outside the sandbox so it could connect to local Docker Postgres; score `100.0`, checks `115/115`, project `216`, evidence trace length `94`.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS after running outside the sandbox so `tsx` could create its IPC pipe; emitted `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS` with terminal artifact `preflight_port_guard`.
+
+### Blockers / Next
+- Legacy LLM RAG script remains blocked until `LLM_API_KEY` is provided via environment and provider quota is available.
+- Frontend source publication still needs a separate Git workflow because the customized LobeChat workspace is a nested repository, not part of the top-level `main` tree.
