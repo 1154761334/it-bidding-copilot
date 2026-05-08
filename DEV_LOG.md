@@ -1659,3 +1659,38 @@
 - Full `git diff --cached --check`: reports pre-existing upstream LobeChat trailing whitespace/snapshot whitespace in vendored frontend files; intentionally not auto-fixed to avoid unrelated upstream formatting churn.
 - `backend/venv/bin/python -m py_compile eval_bid_assistant.py`: PASS.
 - `git -C frontend status --short --branch`: PASS, local nested checkout metadata restored and still reports `canary...origin/canary [ahead 43, behind 31]`.
+
+## 2026-05-08 Round 53
+
+### Baseline
+- User requested a best-practice documentation and maintenance pass for long-term project use, customization, and development.
+- The repository already contained the vendored frontend source on `main`, but the main README was still too compact for future maintainers, frontend README still reflected upstream LobeHub, backend path/model configuration had hardcoded assumptions, and no top-level technical-debt index existed.
+
+### Changes
+- Rewrote the top-level `README.md` as the primary maintainer entrypoint, covering architecture, components, workflow, model/embedding configuration, acceptance commands, data boundaries, and maintenance principles.
+- Added top-level docs: `docs/architecture.md`, `docs/configuration.md`, `docs/development.md`, `docs/operations.md`, `docs/api-and-artifacts.md`, and `docs/technical-debt.md`.
+- Added `.env.example` and `backend/.env.example` with non-secret local defaults and explicit LLM/embedding/frontend variables.
+- Added `backend/README.md` and replaced `frontend/README.md` with a project-specific maintainer guide while preserving upstream content at `frontend/README.upstream.md`.
+- Rewrote `Bidding-agent/README.md` to clarify its optional Hermes/Obsidian role relative to the `/bid` Web workbench; added integration/boundary notes to `obsidian_vault_pipeline/README.md` and `vault-template/README.md`.
+- Centralized backend repository paths in `backend/src/config.py` and replaced hardcoded `/root/it-bidding-copilot` usage in `api_workbench.py`, `main.py`, `ingest.py`, and backend tests with configured repository-relative paths.
+- Generalized fixed Kimi/Volcengine wording in backend code/tests to OpenAI-compatible configured model wording.
+- Removed the obsolete Compose `version` field and parameterized local service usernames, passwords, and ports with `${VAR:-default}` values.
+- Updated Bidding-agent helper scripts to derive repository-relative paths instead of assuming a fixed checkout path.
+
+### Verification
+- `backend/venv/bin/python -m py_compile eval_bid_assistant.py backend/src/config.py backend/src/main.py backend/src/api_workbench.py backend/src/ingest.py backend/src/llm.py backend/src/workflow.py backend/tests/test_rag_workflow.py backend/tests/test_workflow.py`: PASS.
+- `docker compose config`: PASS.
+- `git diff --check`: PASS.
+- `rg -n "Kimi-k2\\.6|Volcengine|/root/it-bidding-copilot" README.md backend backend/README.md docs Bidding-agent/README.md Bidding-agent/scripts obsidian_vault_pipeline/README.md vault-template/README.md frontend/README.md docker-compose.yml`: PASS, no matches.
+- `backend/venv/bin/python eval_bid_assistant.py`: PASS, score `100.0`, checks `115/115`, project `217`, evidence trace length `94`.
+- `cd backend && venv/bin/python -m src.ingest --dry-run`: PASS after running outside the sandbox so it could connect to local Docker PostgreSQL; `253` chunks discoverable from real Vault markdown sources.
+- `cd backend && venv/bin/python tests/api_smoke.py`: PASS after running outside the sandbox so it could connect to local Docker PostgreSQL; emitted `API_SMOKE PASS`.
+- `cd frontend && pnpm run type-check`: PASS.
+- `cd frontend && pnpm run acceptance:bid-smoke:preflight`: PASS, emitted `BID_SMOKE_ACCEPTANCE_PREFLIGHT_PASS`.
+- `cd frontend && pnpm run build`: PASS after running outside the sandbox so `tsx` could create its IPC pipe. Build still emits upstream warning-level output for large chunks, ineffective dynamic imports, missing QStash token, and Node 20 vs oidc-provider runtime guidance, but exits 0.
+- `cd frontend && pnpm run acceptance:bid-smoke:local`: PASS after running outside the sandbox so the helper could start temporary FastAPI/Vite processes; emitted `BID_ROUTE_SMOKE_PASS` and `BID_SMOKE_ACCEPTANCE_LOCAL_PASS`.
+- `pgrep -af '[u]vicorn|[v]ite|[n]ext' || true`: PASS, no matching processes remained after local acceptance.
+
+### Blockers / Next
+- Legacy LLM RAG workflow still requires a real `LLM_API_KEY` and provider quota before it can be treated as a required CI gate.
+- Next useful implementation step: split `backend/src/api_workbench.py` into project-store, artifact-renderer, review-readiness, and workflow orchestration modules, then add JSON Schema/versioning for `evidence_trace.json`.

@@ -4,7 +4,7 @@ Parses the already-converted Markdown files, splits them into structured chunks,
 extracts image references, classifies each chunk, and stores with embeddings.
 
 Usage:
-    cd /root/it-bidding-copilot/backend
+    cd backend
     source venv/bin/activate
     python -m src.ingest
 """
@@ -18,6 +18,7 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.orm import Session
+from src.config import repo_path, settings
 from src.database import engine, Base, SessionLocal
 from src.models import EvidenceItem
 
@@ -218,7 +219,7 @@ def split_markdown_by_headings(content: str, min_chunk_size: int = 100) -> list[
 # ---------------------------------------------------------------------------
 # Main ingestion
 # ---------------------------------------------------------------------------
-VAULT_ROOT = "/root/it-bidding-copilot/vault"
+VAULT_ROOT = str(repo_path(settings.VAULT_ROOT).resolve())
 MEDIA_BASE = os.path.join(
     VAULT_ROOT,
     "raw/historical-bids/浙江省财务开发有限责任公司私有云建设项目-2023/商务技术文件-bundle/attachments"

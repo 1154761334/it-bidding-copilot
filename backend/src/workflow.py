@@ -1,7 +1,7 @@
 """
 LangGraph workflow for the bidding copilot.
 Orchestrates: Plan Mode -> Human Confirmation -> Execute Mode -> Review Mode.
-Uses Kimi-k2.6 via Volcengine for all LLM calls.
+Uses the OpenAI-compatible model configured by LLM_* environment variables.
 """
 from typing import TypedDict, Annotated, Sequence
 import operator

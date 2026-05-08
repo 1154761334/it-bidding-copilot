@@ -1,74 +1,41 @@
 # Bidding-agent
 
-Hermes-based bidding/tender agent system for IT/system-integrator projects.
+`Bidding-agent/` 是 IT Bidding Copilot 的可选 Hermes/Obsidian 投标经理技能包。它不是当前 `/bid` Web 工作台的运行时依赖，而是面向长期知识工作流、Obsidian Vault 和 OVP 的扩展层。
 
-This repository packages a single external entrypoint, `bid-manager`, that presents as a "投标经理 Agent" while internally coordinating sub-agents for evidence handling, technical drafting, and review.
-It is intended to be a bidding-domain integration layer on top of:
-- Hermes Agent
-- Obsidian
-- OVP (`obsidian_vault_pipeline`)
+当前主产品入口见仓库根目录 `README.md`。本目录保留用于：
 
-## Product positioning
+- 投标经理 Agent 技能定义
+- OVP/Obsidian workspace 模板
+- 投标证据、章节、评分项和复核模板
+- Hermes 手工验收与 benchmark 脚本
 
-This is not a generic writing bot.
-It is a tender-production workflow for projects where the bidder often acts as:
-- prime contractor
-- system integrator
-- vendor-collaboration lead
+## 定位
 
-The system is designed around five principles:
-1. single external manager agent
-2. evidence-first bid production
-3. strict separation between bidder capability and vendor/original-manufacturer capability
-4. Obsidian-style AI-managed knowledge base with `inbox / raw / wiki / output / logs`
-5. current tender packages are project-run inputs, not default long-term knowledge assets
+这个技能包面向系统集成和 IT 投标项目，强调：
 
-## Stack model
+- 单一外部身份：`bid-manager`
+- 证据优先的投标生产
+- 投标人能力与厂商能力分离
+- 当前项目输入与长期可复用知识分离
+- 起草前必须先有人确认 outline 和材料边界
+- 正式稿不得写入无证据资格声明、无签核商务口径或伪造页码
 
-This product is intended to run as a stack:
-- Hermes = runtime and orchestration
-- bid-manager = user-facing bidding agent
-- Obsidian = local vault viewing/editing surface
-- OVP (`obsidian_vault_pipeline`) = self-managed knowledge-layer engine
-- helper capabilities = lightweight wrappers around tools such as `pandoc`, PDF extraction, and OCR
+## 目录
 
-## What is in this repo
+| 路径 | 说明 |
+| --- | --- |
+| `skills/bid-manager/SKILL.md` | Hermes 主技能入口。 |
+| `skills/bid-manager/internal/` | 内部模块提示词和 benchmark prompt。 |
+| `docs/` | 架构、部署、工作流、子 agent 和仓库边界说明。 |
+| `templates/` | 项目启动、证据检索、评分映射、章节起草、材料装订和复核模板。 |
+| `templates/workspace/` | 推荐 workspace 骨架。 |
+| `scripts/` | prerequisite check、OVP 安装、workspace 初始化和 benchmark。 |
+| `examples/demo-project/` | 脱敏轻量示例。 |
 
-- `skills/bid-manager/SKILL.md` — main Hermes skill and product entrypoint
-- `docs/` — architecture, workflow, deployment, repository boundary, stack setup, sub-agent model
-- `docs/bid-manager-blueprint.md` — bid-manager capability blueprint
-- `docs/bid-manager-manual-acceptance.md` — manual acceptance checklist
-- `docs/bid-manager-modules/` — internal module contracts for bid-manager
-- `templates/` — reusable markdown templates for intake, evidence, mapping, and review
-- `templates/workspace/` — recommended workspace skeleton
-- `templates/ovp-vault.env.example` — sample vault `.env` for OVP
-- `scripts/init-workspace.sh` — initialize a clean bid workspace
-- `scripts/new-project-inbox.sh` — scaffold a current project input folder
-- `scripts/convert-docx.sh` — lightweight DOCX normalization helper
-- `scripts/init-project-workbench.sh` — scaffold bid-manager project work artifacts inside an OVP workspace
-- `scripts/run-bid-manager-benchmark.sh` — run a fixed benchmark prompt against a workspace and validate outputs
-- `scripts/check-prereqs.sh` — check local prerequisites
-- `scripts/install-ovp.sh` — install OVP from your local fork / fork URL / PyPI
-- `examples/demo-project/` — lightweight sanitized demo materials
-
-## Intended runtime model
-
-External presentation:
-- one agent only: `bid-manager`
-- one identity only: 投标经理 Agent
-
-Internal execution:
-- manager agent
-- evidence sub-agent
-- technical sub-agent
-- optional review sub-agent
-
-The user should feel like they are talking to one bid manager, not manually orchestrating multiple tools.
-
-## Recommended workspace layout
+## 推荐栈
 
 ```text
-/root/it-bidding-copilot/
+IT Bidding Copilot root
 ├── Bidding-agent/
 ├── obsidian_vault_pipeline/
 └── workspaces/
@@ -79,175 +46,50 @@ The user should feel like they are talking to one bid manager, not manually orch
         └── 60-Logs/
 ```
 
-## Safe publishing policy used in this repo
+## 安装与初始化
 
-This repository intentionally excludes:
-- current project input folders
-- raw tender source files
-- exported `.docx` / `.zip` deliverables
-- certificate images and other evidence attachments
-- large intermediate conversion bundles
-- experimental vaults and heavyweight reference data
+从本目录运行：
 
-Only product-facing docs, templates, scripts, and skill definitions are published by default.
-
-## Main workflow
-
-1. project folder intake
-2. project intake questions
-3. workspace check
-4. current tender/package parsing
-5. reusable-knowledge retrieval
-6. evidence organization
-7. score-point / chapter / evidence mapping
-8. outline generation
-9. user confirmation gate
-10. drafting
-11. review
-12. formal-delivery conversion
-13. knowledge backflow
-
-## Installation order
-
-### 1. Check prerequisites
 ```bash
 bash scripts/check-prereqs.sh
-```
-
-### 2. Install Hermes
-```bash
-curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
-hermes doctor
-```
-
-### 3. Install OVP
-```bash
-git clone https://github.com/1154761334/obsidian_vault_pipeline.git /root/it-bidding-copilot/obsidian_vault_pipeline
-cd /root/it-bidding-copilot/Bidding-agent
 bash scripts/install-ovp.sh local
+bash scripts/init-workspace.sh ../workspaces/my-bid-project
+bash scripts/new-project-inbox.sh ../workspaces/my-bid-project project-001
+cp templates/ovp-vault.env.example ../workspaces/my-bid-project/.env
 ```
 
-The install helper retries with `--break-system-packages` automatically on Debian/Ubuntu-style externally managed Python environments.
+如果 OVP 不在仓库同级目录，设置：
 
-### 4. Install Obsidian Desktop
-Install manually from:
-- https://obsidian.md/
-
-### 5. Initialize workspace
 ```bash
-bash scripts/init-workspace.sh /root/it-bidding-copilot/workspaces/my-bid-project
+OVP_LOCAL_PATH=/path/to/obsidian_vault_pipeline bash scripts/install-ovp.sh local
 ```
 
-### 6. Create a current project input folder
-```bash
-bash scripts/new-project-inbox.sh /root/it-bidding-copilot/workspaces/my-bid-project project-001
-```
+## 工作流
 
-### 7. Create vault `.env`
-```bash
-cp templates/ovp-vault.env.example /root/it-bidding-copilot/workspaces/my-bid-project/.env
-```
+1. 项目文件放入 `50-Inbox/01-Raw/current-tender/<project-id>/`。
+2. 投标经理读取项目输入和长期知识。
+3. 整理招标要求、材料清单和缺口。
+4. 建立评分点、章节和证据映射。
+5. 用户确认 outline。
+6. 分章节起草。
+7. Review 废标风险、评分风险、商务/法务风险和材料装订风险。
+8. 交付正式稿和可回流知识。
 
-### 8. Start the manager skill in Hermes
-```bash
-cd /root/it-bidding-copilot/workspaces/my-bid-project
-hermes -s bid-manager
-```
+## 与 `/bid` 工作台的关系
 
-Fallback without a local checkout:
-```bash
-cd /root/it-bidding-copilot/Bidding-agent
-bash scripts/install-ovp.sh fork
-```
+- `/bid` 是当前可验收 Web 产品主线。
+- `Bidding-agent/` 是 Hermes/Obsidian 知识工作流方向的可选扩展。
+- 两者共享投标领域原则：证据优先、人工确认、材料包分工、正式稿事实可追溯。
+- 后续如需融合，应先统一 Artifact 和 evidence trace 合约。
 
-## Project input and knowledge model
+## 安全边界
 
-Current project input:
-- current tender package -> `50-Inbox/01-Raw/current-tender/<project-id>/tender/`
-- project-only bidder supplements -> `50-Inbox/01-Raw/current-tender/<project-id>/company-inputs/`
-- project-only vendor supplements -> `50-Inbox/01-Raw/current-tender/<project-id>/vendor-inputs/`
+默认不发布：
 
-Reusable knowledge assets:
-- historical bids -> `50-Inbox/01-Raw/historical-bid/`
-- company credentials -> `50-Inbox/01-Raw/company-credentials/`
-- vendor materials -> `50-Inbox/01-Raw/vendor-solutions/`
-- shared attachments -> `50-Inbox/01-Raw/attachments/`
+- 当前项目输入文件
+- 原始招标包
+- 导出 `.docx` / `.zip`
+- 证书图片和证据附件
+- 实验 Vault 和大型知识库
 
-Recommended DOCX helper:
-```bash
-bash scripts/convert-docx.sh input.docx /root/it-bidding-copilot/workspaces/my-bid-project/docx-bundle
-```
-
-OVP should be treated as the vault knowledge layer.
-Current tender packages should be treated as project-run inputs unless you intentionally promote reusable facts or patterns into `wiki/`.
-
-## Core public assets in this version
-
-### Main skill
-- `skills/bid-manager/SKILL.md`
-- `skills/bid-manager/internal/` — internal module prompts and benchmark prompt
-
-### Product docs
-- `docs/architecture.md`
-- `docs/workflow.md`
-- `docs/subagents.md`
-- `docs/deployment.md`
-- `docs/repository-boundary.md`
-- `docs/setup-stack.md`
-
-### Reusable templates
-- `templates/project-start-sheet.md`
-- `templates/project-input-manifest.md`
-- `templates/evidence-retrieval-sheet.md`
-- `templates/score-priority-sheet.md`
-- `templates/score-chapter-evidence-mapping.md`
-- `templates/chapter-work-template.md`
-- `templates/material-assembly-checklist.md`
-- `templates/legal-form-template.md`
-- `templates/deviation-response-sheet-template.md`
-- `templates/quote-explanation-template.md`
-- `templates/presentation-outline-template.md`
-- `templates/evidence-page-template.md`
-- `templates/review-checklist.md`
-- `templates/ovp-vault.env.example`
-
-### Demo
-- `examples/demo-project/README.md`
-- `examples/demo-project/session-example.md`
-
-## Why this architecture
-
-Compared with a normal “write the bid for me” agent, this system adds:
-- project-input vs reusable-knowledge separation
-- score-point / chapter / evidence mapping
-- rejection-risk awareness
-- vendor-vs-integrator capability boundary control
-- formal-delivery cleanup rules
-- reusable knowledge accumulation in an Obsidian-style vault structure
-
-## Example startup prompt
-
-```text
-请作为投标经理读取当前 OVP workspace 中的项目输入文件和长期知识材料，先完成项目启动咨询，再解析招标文件、整理证据、建立评分点-章节-证据映射、生成目录占位，并在需要时启用内部 sub agent。
-```
-
-## Key rules
-
-- do not enter chapter drafting before outline confirmation
-- do not output formal qualification claims without evidence
-- do not mix vendor capability with bidder-owned capability
-- do not fabricate page numbers for unfinished sections
-- do not leak internal process text into formal delivery drafts
-- do not treat historical bid facts as current formal facts without confirmation
-- do not treat the current tender package as canonical long-term reusable knowledge by default
-
-## Repository status
-
-This repo is being consolidated from an earlier local prototype workspace that already validated:
-- bid-vault knowledge layout
-- 2+1 sub-agent orchestration
-- evidence-page concept
-- review-loop concept
-- internal-vs-formal draft separation concerns
-
-See `docs/` for the cleaned product architecture.
+只发布技能、模板、脚本、轻量示例和维护文档。

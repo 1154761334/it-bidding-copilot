@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.workflow import bid_workflow
+from src.config import repo_path, settings
 from langchain_core.messages import HumanMessage
 
 
@@ -17,7 +18,7 @@ def test_rag_workflow():
     print("="*60)
 
     # 1. Load a sample tender document
-    tender_path = "/root/it-bidding-copilot/vault/10-Knowledge/Evergreen/招标文件案例.md"
+    tender_path = repo_path(settings.DEMO_TENDER_PATH)
     with open(tender_path, "r", encoding="utf-8") as f:
         tender_md = f.read()[:30000] # Truncate for speed in test
 

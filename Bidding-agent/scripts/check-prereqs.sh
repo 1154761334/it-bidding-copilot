@@ -3,6 +3,9 @@ set -euo pipefail
 
 echo '== Bidding-agent prerequisite check =='
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 echo
 printf '%-18s' 'python3:'
 if command -v python3 >/dev/null 2>&1; then
@@ -47,7 +50,7 @@ else
 fi
 
 printf '%-18s' 'OVP local src:'
-OVP_LOCAL_PATH_CHECK="${OVP_LOCAL_PATH:-/root/it-bidding-copilot/obsidian_vault_pipeline}"
+OVP_LOCAL_PATH_CHECK="${OVP_LOCAL_PATH:-$REPO_ROOT/obsidian_vault_pipeline}"
 if [ -d "$OVP_LOCAL_PATH_CHECK/.git" ]; then
   printf '%s\n' "$OVP_LOCAL_PATH_CHECK (recommended)"
 else
@@ -71,7 +74,7 @@ fi
 echo
 echo 'Recommended stack:'
 echo '1. Hermes installed and working'
-echo '2. Your OVP fork cloned under /root/it-bidding-copilot/obsidian_vault_pipeline or exposed via OVP_LOCAL_PATH'
+echo "2. Your OVP fork cloned under $REPO_ROOT/obsidian_vault_pipeline or exposed via OVP_LOCAL_PATH"
 echo '3. OVP installed in editable mode with bash scripts/install-ovp.sh local'
 echo '4. pandoc installed for docx -> markdown bundles'
 echo '5. pdftotext and/or tesseract available for optional PDF/OCR assistance'

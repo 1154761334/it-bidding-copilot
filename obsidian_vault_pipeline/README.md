@@ -9,6 +9,8 @@ type: meta
 
 # Obsidian Vault Pipeline
 
+> 在 IT Bidding Copilot 中，本目录是可选知识编排子系统。当前 `/bid` Web 工作台不强依赖 OVP 启动，但 OVP 可用于长期 Obsidian Vault 的知识吸收、规范化、派生索引和后续 Agent 工作流。
+
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

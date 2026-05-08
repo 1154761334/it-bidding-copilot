@@ -2,7 +2,9 @@
 set -euo pipefail
 
 OVP_FORK_URL="https://github.com/1154761334/obsidian_vault_pipeline.git"
-DEFAULT_LOCAL_PATH="/root/it-bidding-copilot/obsidian_vault_pipeline"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+DEFAULT_LOCAL_PATH="$REPO_ROOT/obsidian_vault_pipeline"
 MODE="${1:-local}"
 
 run_pip_install() {

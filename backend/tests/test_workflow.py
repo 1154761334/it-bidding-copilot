@@ -1,5 +1,5 @@
 """
-End-to-end test of the full bidding workflow using real LLM (Kimi-k2.6).
+End-to-end test of the full bidding workflow using the configured real LLM.
 Tests the complete flow: Analyze -> Confirm -> Draft -> Review.
 """
 import os
@@ -10,13 +10,14 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.workflow import bid_workflow
+from src.config import settings
 from langchain_core.messages import HumanMessage
 
 
 def test_full_workflow():
     print("=" * 60)
     print("  IT Bidding Copilot - Full E2E Test (Real LLM)")
-    print("  Model: Kimi-k2.6 via Volcengine")
+    print(f"  Model: {settings.LLM_MODEL} via OpenAI-compatible endpoint")
     print("=" * 60)
 
     # 1. Load mock tender document

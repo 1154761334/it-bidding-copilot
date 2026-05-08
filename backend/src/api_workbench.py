@@ -17,13 +17,13 @@ from fastapi import HTTPException
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
-from .config import settings
+from .config import repo_path, settings
 from .evidence import search_evidence
 from .models import EvidenceItem
 
-ROOT = Path("/root/it-bidding-copilot")
-DATA_DIR = Path(settings.BIDDING_DATA_DIR)
-VAULT_TENDER = ROOT / "vault/10-Knowledge/Evergreen/招标文件案例.md"
+ROOT = repo_path(settings.REPO_ROOT).resolve()
+DATA_DIR = repo_path(settings.BIDDING_DATA_DIR).resolve()
+VAULT_TENDER = repo_path(settings.DEMO_TENDER_PATH).resolve()
 
 _projects: dict[str, dict[str, Any]] = {}
 _next_project_id = 1

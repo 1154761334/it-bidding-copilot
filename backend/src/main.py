@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 
+from .config import repo_path, settings
 from .database import engine, Base, get_db
 from . import models
 from .parser import parse_to_markdown
@@ -59,7 +60,11 @@ _next_id = 1
 # ---------------------------------------------------------------------------
 @app.get("/")
 def read_root():
-    return {"message": "IT Bidding Copilot API v1.0 - Powered by Kimi-k2.6"}
+    return {
+        "message": "IT Bidding Copilot API v1.0",
+        "llm_provider": "openai_compatible",
+        "llm_model": settings.LLM_MODEL,
+    }
 
 
 @app.post("/parse/")
@@ -95,7 +100,7 @@ def health(db: Session = Depends(get_db)):
     return {
         "status": "ok",
         "version": "1.0.0",
-        "data_dir": "/root/it-bidding-copilot/workspaces/api-projects",
+        "data_dir": str(repo_path(settings.BIDDING_DATA_DIR).resolve()),
         "core_available": True,
         "evidence_store_available": True,
         "evidence_count": evidence_count,

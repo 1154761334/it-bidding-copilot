@@ -1,6 +1,6 @@
 """
 LLM client module.
-Uses the OpenAI-compatible API from Volcengine to call Kimi-k2.6.
+Uses an OpenAI-compatible chat-completions provider configured by environment.
 """
 from openai import OpenAI
 from .config import settings

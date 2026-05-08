@@ -1,4 +1,21 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_VAULT_ROOT = _REPO_ROOT / "vault"
+DEFAULT_DEMO_TENDER_PATH = DEFAULT_VAULT_ROOT / "10-Knowledge/Evergreen/招标文件案例.md"
+DEFAULT_BIDDING_DATA_DIR = _REPO_ROOT / "workspaces/api-projects"
+
+
+def repo_path(value: str | Path) -> Path:
+    """Resolve configured project paths relative to the repository root."""
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return _REPO_ROOT / path
+
 
 class Settings(BaseSettings):
     # Database
@@ -24,9 +41,17 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "Pro/BAAI/bge-m3"
     EMBEDDING_DIM: int = 1024
 
-    # Local project/artifact workspace. This is ignored by git.
-    BIDDING_DATA_DIR: str = "/root/it-bidding-copilot/workspaces/api-projects"
+    # Local repository paths. These directories are ignored by git when they
+    # contain generated project state or private source materials.
+    REPO_ROOT: str = str(_REPO_ROOT)
+    VAULT_ROOT: str = str(DEFAULT_VAULT_ROOT)
+    DEMO_TENDER_PATH: str = str(DEFAULT_DEMO_TENDER_PATH)
+    BIDDING_DATA_DIR: str = str(DEFAULT_BIDDING_DATA_DIR)
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(
+        env_file=(str(_REPO_ROOT / ".env"), str(_REPO_ROOT / "backend/.env")),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 settings = Settings()
